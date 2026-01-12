@@ -1,0 +1,7 @@
+{
+  "name": "Sto. Niño Student Access System",
+  "description": "Unified academic portal for Sto. Niño College students and faculty.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
