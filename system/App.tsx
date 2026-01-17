@@ -17,10 +17,10 @@ import SchedulePage from './pages/Schedule';
 import GradesPage from './pages/Grades';
 import ModulesPage from './pages/Modules';
 import AssignmentsPage from './pages/Assignments';
-import EnrollmentPage from './pages/Enrollment';
+// import EnrollmentPage from './pages/Enrollment';
 import FacultyAnnouncements from './pages/faculty/FacultyAnnouncements';
 import Masterlist from './pages/faculty/Masterlist';
-import TransfereeStatus from './pages/transferee/Status';
+// import TransfereeStatus from './pages/transferee/Status';
 import StudentID from './pages/student/StudentID';
 import FacultyRequests from './pages/faculty/FacultyRequests';
 import AIAssistant from './components/AIAssistant';
@@ -107,9 +107,9 @@ const Sidebar: React.FC<{ user: User, isOpen: boolean, onClose: () => void, onLo
     ],
     [UserRole.FACULTY]: [],
     [UserRole.TRANSFEREE]: [
-      { name: 'Gateway', path: '/', icon: LayoutDashboard },
-      { name: 'Admission Form', path: '/enrollment', icon: GraduationCap },
-      { name: 'Status', path: '/status', icon: Activity },
+      // { name: 'Gateway', path: '/', icon: LayoutDashboard },
+      // { name: 'Admission Form', path: '/enrollment', icon: GraduationCap },
+      // { name: 'Status', path: '/status', icon: Activity },
     ],
     [UserRole.ADMIN]: [
       { name: 'System Core', path: '/', icon: LayoutDashboard },
@@ -296,11 +296,11 @@ const App: React.FC = () => {
                 <Route path="/attendance" element={<AttendancePage user={user} />} />
                 <Route path="/requests" element={<RequestDocs user={user} />} />
                 <Route path="/transfer-out" element={<DropoutRequestPage user={user} />} />
-                <Route path="/enrollment" element={user.role === UserRole.TRANSFEREE ? <EnrollmentPage user={user} /> : <Navigate to="/" />} />
+                {/* <Route path="/enrollment" element={user.role === UserRole.TRANSFEREE ? <EnrollmentPage user={user} /> : <Navigate to="/" />} /> */}
                 <Route path="/id-card" element={<StudentID user={user} />} />
                 <Route path="/announcements" element={<FacultyAnnouncements user={user} />} />
                 <Route path="/masterlist" element={[UserRole.FACULTY, UserRole.ADMIN, UserRole.TEACHER].includes(user.role) ? <Masterlist user={user} /> : <Navigate to="/" />} />
-                <Route path="/status" element={<TransfereeStatus user={user} />} />
+                {/* <Route path="/status" element={<TransfereeStatus user={user} />} /> */}
                 <Route path="/faculty-requests" element={[UserRole.FACULTY, UserRole.ADMIN].includes(user.role) ? <FacultyRequests user={user} /> : <Navigate to="/" />} />
                 <Route path="/faculty/submissions" element={[UserRole.TEACHER, UserRole.ADMIN].includes(user.role) ? <StudentSubmissions user={user} /> : <Navigate to="/" />} />
                 <Route path="/faculty/email" element={[UserRole.FACULTY, UserRole.TEACHER, UserRole.ADMIN].includes(user.role) ? <FacultyEmail user={user} /> : <Navigate to="/" />} />
