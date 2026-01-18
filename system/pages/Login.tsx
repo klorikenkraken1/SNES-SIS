@@ -5,8 +5,9 @@ import {
   ArrowRight, ShieldCheck, GraduationCap,
   User as UserIcon, Key, ChevronRight,
   ShieldAlert, UserPlus, Presentation,
-  Mail, Clock, ShieldBan
+  Mail, Clock, ShieldBan, ScanLine
 } from 'lucide-react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { Link } from 'react-router-dom';
 import { useUI } from '../App';
 import { api } from '../src/api';
@@ -28,6 +29,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [lockout, setLockout] = useState<LockoutInfo | null>(null);
   const [hasPendingApp, setHasPendingApp] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+
+  useEffect(() => {
+    if (showScanner) {
+      const scanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false
+      );
+      scanner.render((decodedText) => {
+        setEmail(decodedText);
+        setShowScanner(false);
+        scanner.clear();
+        // Focus password field if possible, or user can just type
+      }, (error) => {
+        console.warn(error);
+      });
+
+      return () => {
+        scanner.clear().catch(e => console.error("Failed to clear scanner", e));
+      };
+    }
+  }, [showScanner]);
 
   useEffect(() => {
     setLockout(api.getLockoutInfo());
@@ -211,15 +235,39 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     )}
 
                     <div className="space-y-2 md:space-y-3">
-                      <label className="block text-xs md:text-sm font-black uppercase tracking-[0.2em] text-white/40 ml-3">System Email</label>
+                      <div className="flex justify-between items-center px-3">
+                        <label className="block text-xs md:text-sm font-black uppercase tracking-[0.2em] text-white/40">System Email or User ID</label>
+                        <button 
+                          type="button" 
+                          onClick={() => setShowScanner(!showScanner)}
+                          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-school-gold hover:text-white transition-colors"
+                        >
+                          <ScanLine size={14} /> Scan ID
+                        </button>
+                      </div>
                       <div className="relative flex items-center">
                         <Mail className="absolute left-6 text-white/20" size={20} />
                         <input
-                          type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                          type="text" required value={email} onChange={(e) => setEmail(e.target.value)}
                           className="w-full pl-16 pr-8 py-4 md:py-6 rounded-[2rem] bg-white/5 backdrop-blur-xl border-2 border-white/5 focus:border-school-gold outline-none font-bold text-sm md:text-base text-white shadow-xl transition-all"
-                          placeholder="yourname@gmail.com"
+                          placeholder="Email or Scan ID Card"
                         />
                       </div>
+                      {showScanner && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                          <div className="bg-white rounded-3xl p-6 w-full max-w-md relative">
+                            <button 
+                              onClick={() => setShowScanner(false)}
+                              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"
+                            >
+                              <ArrowRight className="rotate-180" size={20} />
+                            </button>
+                            <h3 className="text-xl font-black text-school-navy mb-4 text-center uppercase tracking-tight">Scan ID QR Code</h3>
+                            <div id="reader" className="overflow-hidden rounded-xl"></div>
+                            <p className="text-center text-xs text-slate-400 mt-4 font-bold uppercase tracking-widest">Point camera at your ID card</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2 md:space-y-3">

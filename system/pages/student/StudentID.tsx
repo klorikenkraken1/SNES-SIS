@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { User } from '../../types';
 import { Download, Printer, ShieldCheck, Mail, Phone, MapPin, BadgeCheck, UserCheck } from 'lucide-react';
 import QRCode from 'react-qr-code';
+import html2canvas from 'html2canvas';
 
 const LOGO_URL = "https://raw.githubusercontent.com/Golgrax/randompublicimagefreetouse/refs/heads/main/logo.png";
 
 const StudentID: React.FC<{ user: User }> = ({ user }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
   const pfp = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=1A237E&color=fff&size=512`;
   
   // Calculate School Year (e.g., June 2024 starts AY 2024-2025)
@@ -15,10 +17,56 @@ const StudentID: React.FC<{ user: User }> = ({ user }) => {
   const schoolYear = month >= 5 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
   
   // Generate Data Hash
-  // Format: Name|LRN|Section|SY
-  const rawData = `${user.name}|${user.lrn || 'N/A'}|${user.section || 'N/A'}|${schoolYear}`;
-  // Simple Base64 "Hash" for portability and basic obfuscation
-  const qrHash = btoa(rawData);
+  // For Login purposes, we will encode the User ID directly.
+  // This allows the scanner to instantly identify the user record.
+  const qrHash = user.id;
+
+  const handleDownload = async () => {
+    if (cardRef.current) {
+      const canvas = await html2canvas(cardRef.current, {
+        useCORS: true,
+        backgroundColor: null,
+        scale: 2 // Higher resolution
+      });
+      const link = document.createElement('a');
+      link.download = `Student-ID-${user.id}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+  };
+
+  const handlePrint = async () => {
+    if (cardRef.current) {
+      const canvas = await html2canvas(cardRef.current, {
+        useCORS: true,
+        backgroundColor: '#ffffff', // Ensure white background for print
+        scale: 2
+      });
+      const imgData = canvas.toDataURL('image/png');
+      
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Print Student ID - ${user.name}</title>
+              <style>
+                body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                img { max-width: 100%; max-height: 100%; object-fit: contain; }
+                @media print {
+                  @page { margin: 0; size: landscape; }
+                }
+              </style>
+            </head>
+            <body>
+              <img src="${imgData}" onload="window.print();window.close()" />
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    }
+  };
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700 max-w-4xl mx-auto">
@@ -27,9 +75,10 @@ const StudentID: React.FC<{ user: User }> = ({ user }) => {
         <p className="text-slate-500 mt-2 font-medium">Official identity card for Academic Year {schoolYear}.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+      {/* ID Card Container to Capture */}
+      <div ref={cardRef} className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center bg-transparent p-4">
         {/* Front of Card */}
-        <div className="relative w-full aspect-auto md:aspect-[1.586/1] rounded-[3rem] bg-gradient-to-br from-school-navy via-[#283593] to-[#1A237E] text-white shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] p-10 overflow-hidden group hover:scale-[1.02] transition-all duration-700 border border-white/10 flex flex-col justify-between">
+        <div className="relative w-full aspect-auto md:aspect-[1.586/1] rounded-[3rem] bg-gradient-to-br from-school-navy via-[#283593] to-[#1A237E] text-white shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] p-10 overflow-hidden group border border-white/10 flex flex-col justify-between print:shadow-none">
           <div className="absolute top-0 right-0 p-10 opacity-5">
             <img src={LOGO_URL} className="rotate-12 translate-x-1/4 -translate-y-1/4 w-[300px] grayscale brightness-200" alt="" />
           </div>
@@ -50,6 +99,7 @@ const StudentID: React.FC<{ user: User }> = ({ user }) => {
                 src={pfp} 
                 alt="Student Photo" 
                 className="w-full h-full object-cover"
+                crossOrigin="anonymous" 
                />
                {!user.avatar && (
                  <div className="absolute inset-0 flex items-center justify-center bg-school-navy/40">
@@ -74,7 +124,7 @@ const StudentID: React.FC<{ user: User }> = ({ user }) => {
         </div>
 
         {/* Back of Card / QR Section */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[3rem] p-12 shadow-sm flex flex-col items-center text-center">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[3rem] p-12 shadow-sm flex flex-col items-center text-center h-full justify-center">
           <div className="p-6 bg-white rounded-[2.5rem] mb-8 shadow-inner border border-slate-100 relative overflow-hidden group">
              <QRCode 
               value={qrHash} 
@@ -96,16 +146,16 @@ const StudentID: React.FC<{ user: User }> = ({ user }) => {
               <p className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate">{user.address || 'Sto. Niño Village, Ph'}</p>
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-4 w-full">
-            <button className="flex items-center justify-center gap-3 py-4.5 bg-school-navy text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 active:scale-95 transition-all shadow-xl shadow-school-navy/10">
-              <Download size={18} /> Download
-            </button>
-            <button className="flex items-center justify-center gap-3 py-4.5 border-2 border-slate-200 dark:border-slate-700 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all">
-              <Printer size={18} /> Print Card
-            </button>
-          </div>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 w-full max-w-lg mx-auto">
+        <button onClick={handleDownload} className="flex items-center justify-center gap-3 py-4.5 bg-school-navy text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 active:scale-95 transition-all shadow-xl shadow-school-navy/10">
+          <Download size={18} /> Download
+        </button>
+        <button onClick={handlePrint} className="flex items-center justify-center gap-3 py-4.5 border-2 border-slate-200 dark:border-slate-700 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all">
+          <Printer size={18} /> Print Card
+        </button>
       </div>
     </div>
   );

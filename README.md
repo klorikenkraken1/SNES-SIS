@@ -5,7 +5,8 @@ Isang comprehensive na school management portal na dine-design para sa Sto. Niñ
 ## Mga Features
 
 ### 🎓 Para sa mga Estudyante (Students)
-*   **Digital Student ID:** View your official ID na may dynamically generated QR code para sa verification.
+*   **Digital Student ID:** View your official ID na may dynamically generated QR code para sa verification. **Supports ID Download and Printing.**
+*   **QR Login:** Use your digital or printed ID to log in quickly via the "Scan ID" feature.
 *   **Grades (SF9):** I-check ang iyong report card at academic performance.
 *   **Attendance:** I-monitor ang iyong daily attendance records.
 *   **Clearance:** I-track ang iyong clearance status para sa school year.

@@ -193,8 +193,9 @@ app.get('/', (req, res) => res.json({ message: 'Welcome to the Sto. Niño Portal
 
 app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
-    console.log(`[LOGIN ATTEMPT] Email: ${email}`);
-    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
+    console.log(`[LOGIN ATTEMPT] Identifier: ${email}`);
+    // Check against email OR id
+    db.get('SELECT * FROM users WHERE email = ? OR id = ?', [email, email], (err, user) => {
         if (err) return res.status(500).json({ message: "Error" });
         if (!user || user.password !== password) return res.status(401).json({ message: "Invalid credentials" });
         const { password: _, ...u } = user;

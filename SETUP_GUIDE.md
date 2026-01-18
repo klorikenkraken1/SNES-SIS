@@ -20,6 +20,8 @@ I-iinstall nito ang mga sumusunod:
 - Express/SQLite dependencies (Backend)
 - `xlsx`, `file-saver` (para sa Admin Exports)
 - `nodemailer`, `multer` (para sa Email at File Uploads)
+- `html2canvas` (ID Card Download)
+- `html5-qrcode` (QR Login Scanner)
 
 ## 2. Database Initialization
 
