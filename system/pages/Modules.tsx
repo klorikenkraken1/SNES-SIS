@@ -19,6 +19,7 @@ const ModulesPage: React.FC<{ user: User }> = ({ user }) => {
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [sections, setSections] = useState<string[]>([]);
+  const [sortOption, setSortOption] = useState('newest');
 
   // Modal states
   const [isAddingModule, setIsAddingModule] = useState(false);
@@ -73,6 +74,31 @@ const ModulesPage: React.FC<{ user: User }> = ({ user }) => {
   useEffect(() => {
     fetchModules();
   }, [user.id]);
+
+  const getSortedModules = () => {
+    return [...modules].sort((a, b) => {
+      // Helper to parse "YYYY-MM-DD" or similar
+      const timeA = new Date(a.uploadDate).getTime();
+      const timeB = new Date(b.uploadDate).getTime();
+
+      switch (sortOption) {
+        case 'newest':
+          return timeB - timeA;
+        case 'oldest':
+          return timeA - timeB;
+        case 'title-az':
+          return a.title.localeCompare(b.title);
+        case 'title-za':
+          return b.title.localeCompare(a.title);
+        case 'subject-az':
+          return a.subject.localeCompare(b.subject);
+        case 'subject-za':
+          return b.subject.localeCompare(a.subject);
+        default:
+          return 0;
+      }
+    });
+  };
 
   const handleCreateModule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +178,19 @@ const ModulesPage: React.FC<{ user: User }> = ({ user }) => {
           <h1 className="text-2xl font-bold text-slate-900">Course Modules</h1>
           <p className="text-slate-500">Download and view reading materials for your subjects.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <select 
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value)}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest text-slate-500 outline-none focus:border-indigo-500 transition-all"
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="title-az">Title (A-Z)</option>
+            <option value="title-za">Title (Z-A)</option>
+            <option value="subject-az">Subject (A-Z)</option>
+            <option value="subject-za">Subject (Z-A)</option>
+          </select>
           {isFaculty && (
             <button 
               onClick={() => setIsAddingModule(true)}
@@ -165,7 +203,7 @@ const ModulesPage: React.FC<{ user: User }> = ({ user }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {modules.map((mod) => (
+        {getSortedModules().map((mod) => (
           <div key={mod.id} className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all group">
             <div className="flex justify-between items-center mb-4">
               <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">

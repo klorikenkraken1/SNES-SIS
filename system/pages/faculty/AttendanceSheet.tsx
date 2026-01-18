@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, AttendanceRecord, UserRole } from '../../types';
 import { api } from '../../src/api';
-import { Calendar, UserCheck, Save, Loader2, Filter, Search, Layers, X, CheckCircle2 } from 'lucide-react';
+import { Calendar, UserCheck, Save, Loader2, Filter, Search, Layers, X, CheckCircle2, Download, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const AttendanceSheet: React.FC<{ user: User }> = ({ user }) => {
   // Parse sections safely
@@ -20,6 +21,7 @@ const AttendanceSheet: React.FC<{ user: User }> = ({ user }) => {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Bulk Update State
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -106,6 +108,69 @@ const AttendanceSheet: React.FC<{ user: User }> = ({ user }) => {
     setSaving(false);
   };
 
+  const handleExportAttendance = () => {
+    const dataToExport = students.map(student => {
+      const record = attendance.find(a => a.studentId === student.id);
+      return {
+        'Student Name': student.name,
+        'Student ID': student.id,
+        'Section': student.section,
+        'Date': selectedDate,
+        'Status': record ? record.status : 'present' // Default to present for export if not recorded
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+    XLSX.writeFile(wb, `Attendance_${selectedSection}_${selectedDate}.xlsx`);
+  };
+
+  const handleImportAttendance = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSaving(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        // Process imported data
+        const promises = data.map((row: any) => {
+          // Flexible column names
+          const studentId = row['Student ID'] || row['studentId'] || row['ID'];
+          const date = row['Date'] || row['date'] || selectedDate;
+          const status = (row['Status'] || row['status'] || 'present').toLowerCase();
+          
+          if (studentId) {
+             return api.postAttendance({
+               studentId: String(studentId),
+               date: date,
+               status: status
+             });
+          }
+          return Promise.resolve();
+        });
+
+        await Promise.all(promises);
+        alert('Attendance imported successfully!');
+        fetchData();
+      } catch (error) {
+        console.error("Import error:", error);
+        alert("Failed to import attendance. Please check the file format.");
+      } finally {
+        setSaving(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   if (!assignedSections.length && user.role !== UserRole.ADMIN) {
     return <div className="p-10 text-center">No assigned sections found. Please contact an administrator.</div>;
   }
@@ -118,7 +183,26 @@ const AttendanceSheet: React.FC<{ user: User }> = ({ user }) => {
           <p className="text-slate-500 mt-2 font-medium">Daily attendance tracking for your sections.</p>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            onChange={handleImportAttendance}
+            className="hidden"
+            accept=".xlsx, .xls"
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-sm hover:scale-105 transition-transform"
+          >
+            <Upload size={18} /> Import
+          </button>
+          <button 
+            onClick={handleExportAttendance}
+            className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-sm hover:scale-105 transition-transform"
+          >
+            <Download size={18} /> Export
+          </button>
           <button 
             onClick={() => setIsBulkModalOpen(true)}
             className="flex items-center gap-3 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-sm hover:scale-105 transition-transform"

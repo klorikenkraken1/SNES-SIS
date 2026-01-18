@@ -95,7 +95,11 @@ const ProfilePage: React.FC<{ user: User, onUpdateUser: (u: User) => void }> = (
 
       {/* Profile Header Card */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[3.5rem] overflow-hidden shadow-2xl">
-         <div className="h-40 bg-gradient-to-r from-school-navy via-indigo-900 to-slate-900 relative">
+         <div className={`h-40 bg-gradient-to-r relative ${
+            user.role === UserRole.ADMIN ? 'from-slate-700 via-slate-800 to-slate-950' :
+            user.role === UserRole.TEACHER ? 'from-rose-700 via-rose-800 to-rose-950' :
+            'from-school-navy via-indigo-900 to-slate-900'
+         }`}>
             <div className="absolute -bottom-16 left-12">
                <div className="w-36 h-36 rounded-[2.5rem] bg-white dark:bg-slate-800 border-8 border-white dark:border-slate-900 shadow-2xl relative overflow-hidden group">
                   <img 

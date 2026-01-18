@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Assignment, Submission, UserRole } from '../types';
 import { api } from '../src/api'; 
-import { Clock, CheckCircle2, FileUp, Loader2, UploadCloud, FileText, CheckCircle, Search, Info, PlusCircle, X, AlertCircle, Edit, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle2, FileUp, Loader2, UploadCloud, FileText, CheckCircle, Search, Info, PlusCircle, X, AlertCircle, Edit, Trash2, Lock, Unlock, Calendar, FileType, Link } from 'lucide-react';
 
 const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<{id: string, name: string, data: string} | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{id: string, file: File} | null>(null);
+  const [sortOption, setSortOption] = useState('due-earliest');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal states
@@ -21,7 +22,10 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
     title: '',
     subject: '',
     dueDate: '',
-    section: 'All', 
+    dueTime: '',
+    section: 'All',
+    allowedFileTypes: '',
+    resourceLink: ''
   });
   const [editForm, setEditForm] = useState<Assignment | null>(null);
   const [formError, setFormError] = useState('');
@@ -47,9 +51,6 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
           );
       }
       
-      console.log("Assignments fetched:", assigns);
-      console.log("Relevant Assignments:", relevantAssignments);
-
       setAssignments(relevantAssignments);
       setSubmissions(subs.filter(s => s.studentId === user.id));
     } catch (error) {
@@ -60,32 +61,52 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
 
   useEffect(() => { fetchAssignmentsAndSubmissions(); }, [user.id]);
 
+  const getSortedAssignments = () => {
+    return [...assignments].sort((a, b) => {
+      const dateA = new Date(`${a.dueDate}T${a.dueTime || '23:59'}`).getTime();
+      const dateB = new Date(`${b.dueDate}T${b.dueTime || '23:59'}`).getTime();
+
+      switch (sortOption) {
+        case 'due-earliest':
+          return dateA - dateB;
+        case 'due-latest':
+          return dateB - dateA;
+        case 'title-az':
+          return a.title.localeCompare(b.title);
+        case 'title-za':
+          return b.title.localeCompare(a.title);
+        case 'subject-az':
+          return a.subject.localeCompare(b.subject);
+        case 'subject-za':
+          return b.subject.localeCompare(a.subject);
+        default:
+          return 0;
+      }
+    });
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, assignmentId: string) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setSelectedFile({
-          id: assignmentId,
-          name: file.name,
-          data: event.target?.result as string
-        });
-      };
-      reader.readAsDataURL(file);
+      setSelectedFile({
+        id: assignmentId,
+        file: file
+      });
     }
   };
 
   const handleSubmit = async (assignmentId: string) => {
-    if (!selectedFile) return;
+    if (!selectedFile || selectedFile.id !== assignmentId) return;
     setSubmitting(assignmentId);
+    
     try {
-      await api.submitAssignmentWork({
-        assignmentId,
-        studentId: user.id,
-        studentName: user.name,
-        fileName: selectedFile.name,
-        fileData: selectedFile.data
-      });
+      const formData = new FormData();
+      formData.append('assignmentId', assignmentId);
+      formData.append('studentId', user.id);
+      formData.append('studentName', user.name);
+      formData.append('file', selectedFile.file);
+
+      await api.submitAssignmentWork(formData);
       
       setTimeout(() => {
         setSubmitting(null);
@@ -94,7 +115,7 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
       }, 1200);
     } catch (error) {
       console.error("Failed to submit assignment:", error);
-      alert("Failed to submit assignment.");
+      alert(error.response?.data?.message || "Failed to submit assignment.");
       setSubmitting(null);
     }
   };
@@ -113,7 +134,7 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
         status: 'pending' // Default status
       });
       setIsAddingAssignment(false);
-      setCreateForm({ title: '', subject: '', dueDate: '', section: 'All' });
+      setCreateForm({ title: '', subject: '', dueDate: '', dueTime: '', section: 'All', allowedFileTypes: '', resourceLink: '' });
       fetchAssignmentsAndSubmissions();
     } catch (error) {
       console.error("Failed to create assignment:", error);
@@ -162,8 +183,28 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
 
   const getStatus = (assignmentId: string) => {
     const sub = submissions.find(s => s.assignmentId === assignmentId);
-    if (!sub) return 'pending';
-    return sub.status;
+    if (sub) return sub.status; // 'pending' or 'graded'
+    return 'not-submitted';
+  };
+  
+  const isSubmissionLate = (assignment: Assignment) => {
+      if (!assignment.dueDate) return false;
+      const due = new Date(`${assignment.dueDate}T${assignment.dueTime || '23:59:00'}`);
+      return new Date() > due;
+  };
+  
+  // Helper to safely get subject and resource link
+  const getAssignmentDetails = (assignment: Assignment) => {
+      let subject = assignment.subject;
+      let link = assignment.resourceLink;
+
+      // Legacy parsing
+      if (!link && subject.includes('Resource:')) {
+          const parts = subject.split('Resource:');
+          subject = parts[0].trim();
+          link = parts[1].trim();
+      }
+      return { subject, link };
   };
 
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin" /></div>;
@@ -175,37 +216,58 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
           <h1 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Learning Deliverables</h1>
           <p className="text-slate-500 mt-2 font-medium">Upload your classroom requirements and track teacher validation.</p>
         </div>
-        {isFaculty && (
-          <button 
-            onClick={() => setIsAddingAssignment(true)}
-            className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform shadow-xl"
+        <div className="flex items-center gap-4">
+          <select 
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value)}
+            className="px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl font-bold text-xs uppercase tracking-widest text-slate-500 outline-none focus:border-indigo-500 transition-all"
           >
-            <PlusCircle size={20} />
-            New Assignment
-          </button>
-        )}
+            <option value="due-earliest">Due: Earliest First</option>
+            <option value="due-latest">Due: Latest First</option>
+            <option value="title-az">Title (A-Z)</option>
+            <option value="title-za">Title (Z-A)</option>
+            <option value="subject-az">Subject (A-Z)</option>
+            <option value="subject-za">Subject (Z-A)</option>
+          </select>
+          {isFaculty && (
+            <button 
+              onClick={() => setIsAddingAssignment(true)}
+              className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform shadow-xl"
+            >
+              <PlusCircle size={20} />
+              New Assignment
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {assignments.length > 0 ? assignments.map((item) => {
+        {assignments.length > 0 ? getSortedAssignments().map((item) => {
           const status = getStatus(item.id);
           const userSub = submissions.find(s => s.assignmentId === item.id);
+          const isLate = isSubmissionLate(item);
+          const isLocked = item.isLocked;
+          const { subject, link } = getAssignmentDetails(item);
 
           return (
-            <div key={item.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-10 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 hover:shadow-xl transition-all group">
+            <div key={item.id} className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-10 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 hover:shadow-xl transition-all group ${isLocked ? 'opacity-70' : ''}`}>
               <div className="flex gap-6 items-start">
                 <div className={`p-4 rounded-3xl transition-colors ${
-                  status === 'pending' ? 'bg-slate-100 text-slate-400' :
-                  status === 'graded' ? 'bg-emerald-50 text-emerald-600' :
-                  'bg-amber-50 text-amber-600'
+                  status === 'not-submitted' ? (isLocked || isLate ? 'bg-rose-50 text-rose-500' : 'bg-slate-100 text-slate-400') :
+                  status === 'pending' ? 'bg-amber-50 text-amber-600' :
+                  'bg-emerald-50 text-emerald-600'
                 }`}>
-                  {status === 'pending' ? <FileText size={32} /> : 
+                  {status === 'not-submitted' ? (isLocked ? <Lock size={32}/> : <FileText size={32} />) : 
                    status === 'graded' ? <CheckCircle size={32} /> : 
                    <Clock size={32} />}
                 </div>
                 <div className="flex-1">
                   <div className="flex justify-between items-start">
-                    <h3 className="text-xl font-black text-slate-800 dark:text-white leading-none">{item.title}</h3>
+                    <h3 className="text-xl font-black text-slate-800 dark:text-white leading-none">
+                        {item.title} 
+                        {isLocked && <span className="ml-2 text-rose-500 text-xs uppercase tracking-widest bg-rose-50 px-2 py-1 rounded-lg">Closed</span>}
+                        {isLate && !isLocked && <span className="ml-2 text-orange-500 text-xs uppercase tracking-widest bg-orange-50 px-2 py-1 rounded-lg">Past Due</span>}
+                    </h3>
                     {isFaculty && (
                       <div className="flex gap-2">
                         <button 
@@ -226,18 +288,34 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
                     )}
                   </div>
                   <div className="flex flex-col gap-2 mt-3">
-                    <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-widest">{item.subject}</span>
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-widest">{subject}</span>
                         <span className="text-slate-300">•</span>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Target: {item.dueDate}</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                            Target: {item.dueDate} {item.dueTime ? `@ ${item.dueTime}` : ''}
+                        </span>
                         <span className="text-slate-300">•</span>
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Section: {item.section || 'All'}</span>
+                        {item.allowedFileTypes && (
+                            <>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
+                                <FileType size={10} /> {item.allowedFileTypes}
+                            </span>
+                            </>
+                        )}
                     </div>
-                    {/* Render resource link if in description */}
-                    {item.subject.includes('http') && (
-                       <a href={item.subject.match(/https?:\/\/[^\s]+/)?.[0]} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-sky-500 hover:underline flex items-center gap-1">
-                          <UploadCloud size={12} /> View Attached Resource
-                       </a>
+                    {link && (
+                        <div className="mt-2">
+                             <a 
+                                href={link} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-100 transition-colors"
+                             >
+                                <Link size={12} /> View Resource
+                             </a>
+                        </div>
                     )}
                   </div>
                 </div>
@@ -245,54 +323,60 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
 
               {!isFaculty && (
                 <div className="flex flex-col sm:flex-row items-center gap-4">
-                  {status === 'pending' ? (
+                  {status === 'not-submitted' ? (
                     <>
-                      <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => handleFileChange(e, item.id)} />
-                      {selectedFile?.id === item.id ? (
-                        <div className="flex items-center gap-3 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl">
-                          <span className="text-[10px] font-bold truncate max-w-[150px]">{selectedFile.name}</span>
-                          <button onClick={() => setSelectedFile(null)} className="text-rose-500 font-black">X</button>
-                        </div>
+                      {isLocked || isLate ? (
+                          <div className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-2xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 cursor-not-allowed">
+                              {isLocked ? <Lock size={16} /> : <Clock size={16} />}
+                              {isLocked ? 'Submissions Closed' : 'Deadline Passed'}
+                          </div>
                       ) : (
-                        <button 
-                          onClick={() => {
-                              // If using ref, we need a way to distinct which assignment triggered it.
-                              // Simple way: set a state or handle click directly if fileInput was per-row.
-                              // Since ref is shared, we must ensure handleFileChange knows the ID.
-                              // Actually, having one ref for map is buggy if multiple clicks.
-                              // We should map inputs or use a different trigger.
-                              // Fix: Use label htmlFor or distinct input.
-                              // Or just trigger the one ref and store currentAssignmentId?
-                              // Just create input inline for simplicity here.
-                              const input = document.getElementById(`file-${item.id}`);
-                              input?.click();
-                          }} 
-                          className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-50 transition-colors"
-                        >
-                          <UploadCloud size={16} /> Choose File
-                        </button>
+                          <>
+                            {selectedFile?.id === item.id ? (
+                                <div className="flex items-center gap-3 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                                <span className="text-[10px] font-bold truncate max-w-[150px]">{selectedFile.file.name}</span>
+                                <button onClick={() => setSelectedFile(null)} className="text-rose-500 font-black">X</button>
+                                </div>
+                            ) : (
+                                <button 
+                                onClick={() => {
+                                    const input = document.getElementById(`file-${item.id}`);
+                                    input?.click();
+                                }} 
+                                className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-50 transition-colors"
+                                >
+                                <UploadCloud size={16} /> Choose File
+                                </button>
+                            )}
+                            <input 
+                                type="file" 
+                                id={`file-${item.id}`} 
+                                className="hidden" 
+                                accept={item.allowedFileTypes ? item.allowedFileTypes.split(',').map(e => e.trim().startsWith('.') ? e.trim() : '.' + e.trim()).join(',') : '*'}
+                                onChange={(e) => handleFileChange(e, item.id)} 
+                            />
+                            
+                            <button 
+                                onClick={() => handleSubmit(item.id)} 
+                                disabled={!selectedFile || selectedFile.id !== item.id || submitting === item.id} 
+                                className="px-8 py-3 bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest rounded-2xl flex items-center gap-2 hover:scale-105 transition-all shadow-xl disabled:opacity-50 disabled:hover:scale-100"
+                            >
+                                {submitting === item.id ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}
+                                Submit
+                            </button>
+                          </>
                       )}
-                      <input type="file" id={`file-${item.id}`} className="hidden" onChange={(e) => handleFileChange(e, item.id)} />
-                      
-                      <button 
-                        onClick={() => handleSubmit(item.id)} 
-                        disabled={!selectedFile || selectedFile.id !== item.id || submitting === item.id} 
-                        className="px-8 py-3 bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest rounded-2xl flex items-center gap-2 hover:scale-105 transition-all shadow-xl disabled:opacity-50"
-                      >
-                        {submitting === item.id ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}
-                        Submit
-                      </button>
                     </>
                   ) : (
                     <div className="flex flex-col items-end gap-2">
                       <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl border ${
                         status === 'graded' 
                           ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
-                          : 'bg-amber-50 border-amber-100 text-amber-600'
+                          : 'bg-indigo-50 border-indigo-100 text-indigo-600'
                       }`}>
-                        {status === 'graded' ? <CheckCircle2 size={16} /> : <Loader2 size={16} className="animate-pulse" />}
+                        {status === 'graded' ? <CheckCircle2 size={16} /> : <CheckCircle size={16} />}
                         <span className="text-[9px] font-black uppercase tracking-widest">
-                          {status === 'graded' ? `Score: ${userSub?.grade}/100` : 'Reviewing'}
+                          {status === 'graded' ? `Score: ${userSub?.grade}/100` : 'Submitted'}
                         </span>
                       </div>
                       {userSub?.fileName && (
@@ -311,10 +395,10 @@ const AssignmentsPage: React.FC<{ user: User }> = ({ user }) => {
         )}
       </div>
 
-      {/* Add Assignment Modal (retained) */}
+      {/* Add Assignment Modal */}
       {isAddingAssignment && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
-           <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 overflow-hidden">
+           <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 overflow-hidden max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-3">
                    <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-2xl">

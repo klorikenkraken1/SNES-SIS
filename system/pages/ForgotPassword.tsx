@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ArrowLeft, Mail, Key, ShieldCheck, 
   RefreshCcw, CheckCircle2, ShieldAlert,
@@ -14,39 +14,78 @@ const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [inputToken, setInputToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlToken = searchParams.get('token');
 
-  const handleVerifyEmail = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (urlToken) {
+      setInputToken(urlToken);
+      setStep(2);
+    }
+  }, [urlToken]);
+
+  const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call to check email
-    setTimeout(() => {
-      // Simplified: Allow any valid email format as per user request
-      if (!email || !email.includes('@')) {
-        setError('Please enter a valid email address.');
-        setIsLoading(false);
-      } else {
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Automatically advance to step 2 for manual entry
         setStep(2);
-        setIsLoading(false);
-        setError('');
+      } else {
+        setError(data.message || 'Failed to send recovery link.');
       }
-    }, 1000);
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleReset = (e: React.FormEvent) => {
+  const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
+    
     setIsLoading(true);
-    // Simulate API password update
-    setTimeout(() => {
-      setStep(3);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: inputToken, newPassword })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setStep(3);
+      } else {
+        setError(data.message || 'Failed to reset password.');
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -57,7 +96,6 @@ const ForgotPassword = () => {
       <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[4px]"></div>
 
       <div className="w-full max-w-xl relative z-10 animate-in fade-in zoom-in-95 duration-500">
-        {/* Darkened glass container for superior readability */}
         <div className="bg-slate-900/85 backdrop-blur-2xl p-12 rounded-[4rem] border-2 border-white/10 shadow-[0_50px_100px_rgba(0,0,0,0.6)]">
           
           <div className="text-center mb-10">
@@ -103,15 +141,27 @@ const ForgotPassword = () => {
               <div className="p-6 bg-amber-500/10 border-2 border-amber-500/20 rounded-[2rem] flex items-start gap-4 mb-4">
                 <ShieldCheck className="text-amber-500 shrink-0" size={24} />
                 <p className="text-[10px] font-bold text-amber-100 uppercase tracking-widest leading-relaxed">
-                  Verification successful for {email}. Please define your new security key below.
+                  Token sent to {email}. Check your inbox and paste it below.
                 </p>
               </div>
 
               <div className="space-y-6">
                 <div className="space-y-3">
-                  <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-slate-300 ml-4">New Security Key</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 ml-4">Recovery Token</label>
                   <div className="relative flex items-center">
                     <Key className="absolute left-6 text-white/30" size={24} />
+                    <input 
+                      type="text" required value={inputToken} onChange={(e) => setInputToken(e.target.value)}
+                      className="w-full pl-16 pr-8 py-6 rounded-[2rem] bg-white/5 border-2 border-white/5 focus:border-school-gold outline-none font-bold text-white shadow-xl transition-all placeholder:text-slate-500"
+                      placeholder="Paste token here"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 ml-4">New Security Key</label>
+                  <div className="relative flex items-center">
+                    <ShieldAlert className="absolute left-6 text-white/30" size={24} />
                     <input 
                       type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                       className="w-full pl-16 pr-8 py-6 rounded-[2rem] bg-white/5 border-2 border-white/5 focus:border-school-gold outline-none font-bold text-white shadow-xl transition-all placeholder:text-slate-500"
@@ -120,9 +170,9 @@ const ForgotPassword = () => {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <label className="block text-[11px] font-black uppercase tracking-[0.2em] text-slate-300 ml-4">Confirm New Key</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 ml-4">Confirm New Key</label>
                   <div className="relative flex items-center">
-                    <Key className="absolute left-6 text-white/30" size={24} />
+                    <ShieldAlert className="absolute left-6 text-white/30" size={24} />
                     <input 
                       type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
                       className="w-full pl-16 pr-8 py-6 rounded-[2rem] bg-white/5 border-2 border-white/5 focus:border-school-gold outline-none font-bold text-white shadow-xl transition-all placeholder:text-slate-500"

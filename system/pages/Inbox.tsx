@@ -7,6 +7,7 @@ const Inbox: React.FC<{ user: User }> = ({ user }) => {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
+  const [sortOption, setSortOption] = useState('newest');
 
   useEffect(() => {
     api.getMessages(user.id).then(data => {
@@ -14,6 +15,35 @@ const Inbox: React.FC<{ user: User }> = ({ user }) => {
       setLoading(false);
     });
   }, [user.id]);
+
+  const getSortedMessages = () => {
+    return [...messages].sort((a, b) => {
+      // Helper for date parsing if needed, but Date constructor usually handles locale string well enough for sorting relative to each other if consistent
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+
+      switch (sortOption) {
+        case 'newest':
+          return timeB - timeA;
+        case 'oldest':
+          return timeA - timeB;
+        case 'sender-az':
+          return (a.sender || 'System').localeCompare(b.sender || 'System');
+        case 'sender-za':
+          return (b.sender || 'System').localeCompare(a.sender || 'System');
+        case 'subject-az':
+          return a.subject.localeCompare(b.subject);
+        case 'subject-za':
+          return b.subject.localeCompare(a.subject);
+        case 'size-short':
+          return a.content.length - b.content.length;
+        case 'size-long':
+          return b.content.length - a.content.length;
+        default:
+          return 0;
+      }
+    });
+  };
 
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-school-navy" size={40} /></div>;
 
@@ -24,8 +54,24 @@ const Inbox: React.FC<{ user: User }> = ({ user }) => {
           <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">My Inbox</h1>
           <p className="text-slate-500 mt-2 font-medium">Official communications and announcements.</p>
         </div>
-        <div className="px-6 py-3 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 text-xs font-black uppercase tracking-widest text-slate-500">
-          {messages.length} Messages
+        <div className="flex items-center gap-4">
+          <select 
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value)}
+            className="px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl font-bold text-xs uppercase tracking-widest text-slate-500 outline-none focus:border-indigo-500 transition-all"
+          >
+            <option value="newest">Latest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="sender-az">Sender (A-Z)</option>
+            <option value="sender-za">Sender (Z-A)</option>
+            <option value="subject-az">Subject (A-Z)</option>
+            <option value="subject-za">Subject (Z-A)</option>
+            <option value="size-short">Shortest First</option>
+            <option value="size-long">Longest First</option>
+          </select>
+          <div className="px-6 py-3 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 text-xs font-black uppercase tracking-widest text-slate-500">
+            {messages.length} Messages
+          </div>
         </div>
       </div>
 
@@ -36,7 +82,7 @@ const Inbox: React.FC<{ user: User }> = ({ user }) => {
              <h3 className="font-black uppercase tracking-widest text-xs text-slate-400">All Messages</h3>
            </div>
            <div className="overflow-y-auto flex-1 p-4 space-y-2">
-             {messages.length > 0 ? messages.map(msg => (
+             {messages.length > 0 ? getSortedMessages().map(msg => (
                <div 
                 key={msg.id}
                 onClick={() => setSelectedMessage(msg)}

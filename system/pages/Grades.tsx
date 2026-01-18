@@ -4,8 +4,9 @@ import { api } from '../src/api'; // Changed from mockApiService
 import { 
   Award, TrendingUp, Save, 
   Edit, CheckCircle2, User as UserIcon,
-  Printer, FileText, Download, Star, PlusCircle, X, AlertCircle, Trash2, Loader2
+  Printer, FileText, Download, Star, PlusCircle, X, AlertCircle, Trash2, Loader2, Upload
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const calculateFinalAverageAndRemarks = (q1: number, q2: number, q3: number, q4: number) => {
     const scores = [q1, q2, q3, q4].filter(x => x > 0);
@@ -22,6 +23,10 @@ const GradesPage: React.FC<{ user: User }> = ({ user }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempData, setTempData] = useState<Partial<Grade>>({}); // For editing existing grade
   const [toast, setToast] = useState<string | null>(null);
+
+  // Import/Export State
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Modal states
   const [isAddingGrade, setIsAddingGrade] = useState(false);
@@ -136,6 +141,79 @@ const GradesPage: React.FC<{ user: User }> = ({ user }) => {
     }
   };
 
+  const handleExportGrades = () => {
+    const ws = XLSX.utils.json_to_sheet(grades);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Grades");
+    XLSX.writeFile(wb, `grades_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleImportGrades = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json<any>(worksheet);
+
+      if (jsonData.length === 0) {
+        alert("No data found in the imported file.");
+        setImporting(false);
+        return;
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const row of jsonData) {
+        try {
+          const { finalAverage, remarks } = calculateFinalAverageAndRemarks(row.q1 || 0, row.q2 || 0, row.q3 || 0, row.q4 || 0);
+          const gradeData = { ...row, finalAverage, remarks };
+
+          if (row.id) {
+             // Try to update
+             await api.updateGrade(row.id, gradeData);
+          } else {
+             // Create new
+             // Need studentId and subject. If studentId is missing but studentName is there, we might have a problem unless we lookup.
+             // Assuming export/import cycle, studentId should be there.
+             // If creating from scratch in excel, user must provide studentId or we need a lookup.
+             // For now, assume studentId is present in row.
+             if (!row.studentId && row.studentName) {
+                 // Try to find student by name (fuzzy or exact)
+                 const student = students.find(s => s.name === row.studentName);
+                 if (student) gradeData.studentId = student.id;
+             }
+
+             if (gradeData.studentId && gradeData.subject) {
+                 await api.createGrade(gradeData);
+             } else {
+                 throw new Error("Missing studentId or subject");
+             }
+          }
+          successCount++;
+        } catch (err) {
+          console.warn("Failed to process row:", row, err);
+          failCount++;
+        }
+      }
+      
+      setToast(`Import: ${successCount} success, ${failCount} failed`);
+      setTimeout(() => setToast(null), 4000);
+      load();
+
+    } catch (error) {
+      console.error("Import failed:", error);
+      alert("Failed to import grades: " + error.message);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   if (loading) return (
     <div className="h-[60vh] flex items-center justify-center">
       <Loader2 className="animate-spin text-school-navy" size={40} />
@@ -158,21 +236,41 @@ const GradesPage: React.FC<{ user: User }> = ({ user }) => {
         </div>
         <div className="flex gap-3">
           {isFaculty && (
-            <button 
-              onClick={() => setIsAddingGrade(true)}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg"
-            >
-              <PlusCircle size={16} /> Add Grade
-            </button>
+            <>
+              <input 
+                type="file" 
+                accept=".xlsx, .xls" 
+                ref={fileInputRef} 
+                onChange={handleImportGrades} 
+                className="hidden" 
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+                className="px-6 py-3 bg-emerald-600 text-white rounded-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg hover:opacity-90 transition-all disabled:opacity-50"
+              >
+                {importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} Import
+              </button>
+              <button 
+                onClick={handleExportGrades}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg hover:opacity-90 transition-all"
+              >
+                <Download size={16} /> Export
+              </button>
+              <button 
+                onClick={() => setIsAddingGrade(true)}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg"
+              >
+                <PlusCircle size={16} /> Add Grade
+              </button>
+            </>
           )}
           <button className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-100 rounded-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-sm">
              <Printer size={16} /> Print Card
           </button>
-          <button className="px-6 py-3 bg-indigo-600 text-white rounded-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest shadow-lg">
-             <Download size={16} /> Export PDF
-          </button>
         </div>
       </div>
+
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[3rem] shadow-xl overflow-hidden">
         <div className="overflow-x-auto">

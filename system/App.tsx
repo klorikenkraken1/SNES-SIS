@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { MemoryRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, GraduationCap, BookOpen, FileText, 
   ClipboardList, LogOut, Bell, Search, Menu, X, 
@@ -38,6 +38,7 @@ import RequestDocs from './pages/student/RequestDocs';
 import AttendanceSheet from './pages/faculty/AttendanceSheet';
 import Inbox from './pages/Inbox';
 import VerifyEmail from './pages/VerifyEmail';
+import SecretAdmission from './pages/admin/SecretAdmission';
 import { api } from './src/api';
 
 const LOGO_URL = "https://raw.githubusercontent.com/Golgrax/randompublicimagefreetouse/refs/heads/main/logo.png";
@@ -61,21 +62,50 @@ const UIContext = createContext<{
 
 export const useUI = () => useContext(UIContext);
 
-const PendingApproval: React.FC<{ onLogout: () => void, user: User }> = ({ onLogout, user }) => (
-  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
-    <div className="w-24 h-24 bg-white dark:bg-slate-900 p-3 rounded-[2rem] flex items-center justify-center mb-8 shadow-2xl border border-slate-100 dark:border-slate-800 animate-pulse overflow-hidden">
-      <img src={LOGO_URL} className="w-full h-full object-contain" alt="Sto. Niño Logo" />
+const PendingApproval: React.FC<{ onLogout: () => void, user: User }> = ({ onLogout, user }) => {
+  const handleResendEmail = async () => {
+    try {
+      // Assuming a backend endpoint exists or we reuse the signup logic conceptually,
+      // but typically we need a specific endpoint. 
+      // Since I haven't created a specific 'resend-verify' endpoint yet, 
+      // I will assume for this task I should just add the button and maybe mock the alert or 
+      // if I need to implement the backend, I should do that too. 
+      // The user asked "add a button resend email".
+      // I will implement the button and a basic fetch call.
+      // I'll need to create the endpoint in server.js next.
+      const response = await fetch('/api/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email })
+      });
+      if (response.ok) {
+        alert('Verification email sent! Please check your inbox.');
+      } else {
+        alert('Failed to send email. Please try again later.');
+      }
+    } catch (error) {
+      console.error('Error sending email:', error);
+      alert('An error occurred. Please check your connection.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-24 h-24 bg-white dark:bg-slate-900 p-3 rounded-[2rem] flex items-center justify-center mb-8 shadow-2xl border border-slate-100 dark:border-slate-800 animate-pulse overflow-hidden">
+        <img src={LOGO_URL} className="w-full h-full object-contain" alt="Sto. Niño Logo" />
+      </div>
+      <h1 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4">Verification Pending</h1>
+      <p className="text-slate-500 font-medium max-w-md leading-relaxed mb-10">
+        Hello, <span className="text-slate-900 dark:text-white font-black">{user.name}</span>. Your account has been created, but a system administrator must approve your access level before you can use the school features.
+      </p>
+      <div className="flex gap-4">
+        <button onClick={() => window.location.reload()} className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Check Status</button>
+        <button onClick={handleResendEmail} className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Resend Email</button>
+        <button onClick={onLogout} className="px-8 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 shadow-sm">Sign Out</button>
+      </div>
     </div>
-    <h1 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4">Verification Pending</h1>
-    <p className="text-slate-500 font-medium max-w-md leading-relaxed mb-10">
-      Hello, <span className="text-slate-900 dark:text-white font-black">{user.name}</span>. Your account has been created, but a system administrator must approve your access level before you can use the school features.
-    </p>
-    <div className="flex gap-4">
-      <button onClick={() => window.location.reload()} className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Check Status</button>
-      <button onClick={onLogout} className="px-8 py-4 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl font-black text-xs uppercase tracking-widest border border-slate-200 dark:border-slate-700 shadow-sm">Sign Out</button>
-    </div>
-  </div>
-);
+  );
+};
 
 const Sidebar: React.FC<{ user: User, isOpen: boolean, onClose: () => void, onLogout: () => void, onUpdateUser: (u: User) => void }> = ({ user, isOpen, onClose, onLogout, onUpdateUser }) => {
   const location = useLocation();
@@ -219,6 +249,7 @@ const Header: React.FC<{ onMenuClick: () => void, user: User }> = ({ onMenuClick
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('app_theme') as Theme) || 'light');
   const [prefs, setPrefsState] = useState<UIPreferences>(() => ({
     dyslexic: localStorage.getItem('prefs_dyslexic') === 'true',
@@ -231,6 +262,16 @@ const App: React.FC = () => {
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
+        
+        // MIGRATION FIX: Handle referenceNo -> id
+        if (!parsedUser.id && parsedUser.referenceNo) {
+            console.log("Migrating user session: referenceNo -> id");
+            parsedUser.id = parsedUser.referenceNo;
+            localStorage.setItem('school_user', JSON.stringify(parsedUser));
+        }
+
+        console.log("Restoring session for:", parsedUser.id);
+
         // Validate session with backend
         api.getUser(parsedUser.id)
           .then(validUser => {
@@ -242,12 +283,16 @@ const App: React.FC = () => {
             console.warn("Session expired or invalid:", err);
             localStorage.removeItem('school_user');
             setUser(null);
-          });
+          })
+          .finally(() => setIsSessionLoading(false));
       } catch (error) {
         console.error("Failed to parse user from localStorage", error);
         localStorage.removeItem('school_user');
         setUser(null);
+        setIsSessionLoading(false);
       }
+    } else {
+        setIsSessionLoading(false);
     }
   }, []);
 
@@ -262,9 +307,11 @@ const App: React.FC = () => {
   const handleLogin = (u: User) => { setUser(u); localStorage.setItem('school_user', JSON.stringify(u)); };
   const handleLogout = () => { localStorage.removeItem('school_user'); setUser(null); };
 
+  if (isSessionLoading) return <div className="h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div></div>;
+
   return (
     <UIContext.Provider value={{ theme, setTheme, prefs, setPrefs }}>
-      <MemoryRouter>
+      <BrowserRouter>
         {!user ? (
           <Routes>
             <Route path="/" element={<Login onLogin={handleLogin} />} />
@@ -308,6 +355,7 @@ const App: React.FC = () => {
                 <Route path="/admin/users" element={user.role === UserRole.ADMIN ? <AdminUserManagement /> : <Navigate to="/" />} />
                 <Route path="/admin/database" element={user.role === UserRole.ADMIN ? <DatabaseViewer /> : <Navigate to="/" />} />
                 <Route path="/admin/facilities" element={user.role === UserRole.ADMIN ? <AdminFacilities /> : <Navigate to="/" />} />
+                <Route path="/admission" element={user.role === UserRole.ADMIN ? <SecretAdmission user={user} /> : <Navigate to="/" />} />
                 <Route path="/facilities" element={<FacilitiesPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
@@ -315,7 +363,7 @@ const App: React.FC = () => {
             <AIAssistant user={user} />
           </div>
         )}
-      </MemoryRouter>
+      </BrowserRouter>
     </UIContext.Provider>
   );
 };

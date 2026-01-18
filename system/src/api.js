@@ -23,7 +23,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ name, email, password, role }),
     }),
-    getUser: (id) => fetchData(`/users?id=${id}`),
+    getUser: (id) => {
+        if (!id || id === 'undefined') return Promise.reject(new Error('Invalid User ID'));
+        return fetchData(`/users?id=${id}`);
+    },
     getUsers: (section = '') => fetchData(`/users${section ? `?section=${section}` : ''}`),
     createUser: (name, email, role) => fetchData('/users', {
         method: 'POST',
@@ -127,10 +130,21 @@ export const api = {
 
     // Submissions API
     getSubmissions: () => fetchData('/submissions'),
-    submitAssignmentWork: (submissionData) => fetchData('/submissions', {
-        method: 'POST',
-        body: JSON.stringify(submissionData),
-    }),
+    submitAssignmentWork: (submissionData) => {
+        if (submissionData instanceof FormData) {
+            return fetch(`${API_BASE_URL}/submissions`, {
+                method: 'POST',
+                body: submissionData,
+            }).then(res => {
+                if (!res.ok) return res.json().then(e => { throw new Error(e.message) });
+                return res.json();
+            });
+        }
+        return fetchData('/submissions', {
+            method: 'POST',
+            body: JSON.stringify(submissionData),
+        });
+    },
     gradeSubmission: (id, gradeData) => fetchData(`/submissions/${id}`, {
         method: 'PUT',
         body: JSON.stringify(gradeData),
@@ -228,7 +242,10 @@ export const api = {
 
     // Email Broadcast API
     getEmailLogs: () => fetchData('/email-logs'),
-    getMessages: (userId) => fetchData(`/messages?userId=${userId}`),
+    getMessages: (userId) => {
+        if (!userId || userId === 'undefined') return Promise.resolve([]);
+        return fetchData(`/messages?userId=${userId}`);
+    },
     sendEmailBroadcast: (emailData) => fetchData('/email-broadcast', {
         method: 'POST',
         body: JSON.stringify(emailData),

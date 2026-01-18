@@ -8,6 +8,10 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -21,16 +25,54 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Ensure uploads directory exists
-const uploadDir = path.join(process.cwd(), 'uploads/avatars');
+const uploadRoot = path.join(__dirname, '../uploads');
+const uploadDir = path.join(uploadRoot, 'avatars');
+const docsDir = path.join(uploadRoot, 'documents');
+
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
+if (!fs.existsSync(docsDir)) {
+    fs.mkdirSync(docsDir, { recursive: true });
+}
 
-// Multer Configuration (Memory Storage for Sharp processing)
-const upload = multer({ storage: multer.memoryStorage() });
+// Multer Configuration
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    if (file.fieldname === 'file' || file.fieldname === 'sf9') {
+      cb(null, docsDir);
+    } else {
+      cb(null, uploadDir); // Default or fallback (avatars)
+    }
+  },
+  filename: function (req, file, cb) {
+    // Keep original extension
+    const ext = path.extname(file.originalname);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
+
+// Memory upload for avatars (specific handling if needed, or reuse disk storage but resizing handles it)
+// For now, let's keep the existing avatar route using buffer if possible, BUT
+// the previous code used `multer.memoryStorage()` for everything. 
+// We need to mix them or use conditional logic. 
+// Simpler: Use memory storage for avatar route specifically if we want to process with Sharp immediately.
+// But we can also process from disk.
+// To avoid breaking the avatar route which expects `req.file.buffer`, let's define a separate upload middleware for avatars if we want to keep memory storage there, 
+// OR simpler: Use disk storage for everything and read from disk for Sharp.
+// However, let's just make a specific instance for documents.
+
+const documentUpload = multer({ storage: storage });
+const avatarUpload = multer({ storage: multer.memoryStorage() }); // Keep original for avatars
 
 // Serve Static Files
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(uploadRoot));
 
 // Email Transporter Configuration
 const transporter = nodemailer.createTransport({
@@ -39,10 +81,13 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  debug: true, // show debug output
+  logger: true // log information in console
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // --- LOGGING HELPER ---
 const logActivity = (userId, userName, action, category) => {
@@ -62,6 +107,39 @@ app.use((req, res, next) => {
 });
 
 // --- VERIFICATION ROUTES ---
+app.post('/api/resend-verification', (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email required" });
+    
+    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
+        if (err || !user) return res.status(404).json({ message: "User not found" });
+        if (user.emailVerified) return res.status(400).json({ message: "Email already verified" });
+
+        const verificationLink = `http://localhost:${PORT}/api/verify?token=${user.verificationToken}`;
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'Verify your email - Sto. Niño Portal',
+            html: `
+                <h1>Welcome Back to Sto. Niño Portal!</h1>
+                <p>Hello ${user.name},</p>
+                <p>You requested a new verification email. Please click the link below to verify your email address:</p>
+                <a href="${verificationLink}">Verify Email</a>
+                <p>If you did not request this, please ignore this email.</p>
+            `
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.log('Error sending verification email:', error);
+                return res.status(500).json({ message: "Failed to send email" });
+            }
+            console.log('Verification email resent:', info.response);
+            res.json({ message: "Verification email sent" });
+        });
+    });
+});
+
 app.get('/api/verify', (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).json({ message: "Token required" });
@@ -75,7 +153,7 @@ app.get('/api/verify', (req, res) => {
     });
 });
 
-app.post('/api/users/:id/avatar', upload.single('avatar'), async (req, res) => {
+app.post('/api/users/:id/avatar', avatarUpload.single('avatar'), async (req, res) => {
     const { id } = req.params;
     if (!req.file) return res.status(400).json({ message: "No file uploaded." });
     try {
@@ -212,10 +290,13 @@ app.get('/api/users', (req, res) => {
     const { id, section, role } = req.query;
     if (id) {
         db.get('SELECT * FROM users WHERE id = ?', [id], (err, row) => {
-            if (err) return res.status(500).json({ message: "Error" });
-            if (!row) return res.status(404).json({ message: "Not found" });
-            const { password, ...u } = row;
-            res.json(u);
+            if (err) {
+                console.error("GET /api/users Error:", err);
+                return res.status(500).json({ message: "Error", error: err.message });
+            }
+            if (!row) return res.status(404).json({ message: "User not found" });
+            const { password, ...rest } = row;
+            res.json(rest);
         });
     } else {
         let sql = 'SELECT * FROM users';
@@ -231,13 +312,19 @@ app.get('/api/users', (req, res) => {
     }
 });
 app.post('/api/users', (req, res) => {
-    const { name, email, role } = req.body;
+    const { firstName, middleName, lastName, extension, email, role } = req.body;
+    // Fallback if legacy 'name' is sent but not parts (should be handled by frontend, but safety check)
+    let finalName = req.body.name;
+    if (!finalName && firstName) {
+        finalName = `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}${extension ? ' ' + extension : ''}`.trim();
+    }
+
     console.log(`[SIGNUP ATTEMPT] Email: ${email}`);
     const id = 'u-' + Date.now();
     const pwd = req.body.password || '123';
     const token = crypto.randomBytes(32).toString('hex');
-    db.run('INSERT INTO users (id, name, email, role, password, verificationToken, emailVerified, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-        [id, name, email, role, pwd, token, 0, 'active'], 
+    db.run('INSERT INTO users (id, name, firstName, middleName, lastName, extension, email, role, password, verificationToken, emailVerified, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+        [id, finalName, firstName, middleName, lastName, extension, email, role, pwd, token, 0, 'active'], 
         async function(err) {
             if (err) {
                 console.error("Error creating user:", err.message);
@@ -247,10 +334,31 @@ app.post('/api/users', (req, res) => {
                 return res.status(500).json({ message: "Error creating user" });
             }
             try {
-                // optional email logic
-                logActivity(id, name, `New User Created (${role})`, "Admin");
-                res.status(201).json({ id, name, email, role });
-            } catch(e) { res.status(201).json({ id, name, email, role }); }
+                // Email Verification Logic
+                const verificationLink = `http://localhost:${PORT}/api/verify?token=${token}`;
+                const mailOptions = {
+                    from: process.env.EMAIL_USER,
+                    to: email,
+                    subject: 'Verify your email - Sto. Niño Portal',
+                    html: `
+                        <h1>Welcome to Sto. Niño Portal!</h1>
+                        <p>Hello ${finalName},</p>
+                        <p>Please click the link below to verify your email address:</p>
+                        <a href="${verificationLink}">Verify Email</a>
+                        <p>If you did not sign up, please ignore this email.</p>
+                    `
+                };
+                transporter.sendMail(mailOptions, (error, info) => {
+                    if (error) {
+                        console.log('Error sending verification email:', error);
+                    } else {
+                        console.log('Verification email sent:', info.response);
+                    }
+                });
+
+                logActivity(id, finalName, `New User Created (${role})`, "Admin");
+                res.status(201).json({ id, name: finalName, email, role });
+            } catch(e) { res.status(201).json({ id, name: finalName, email, role }); }
     });
 });
 app.put('/api/users/:id', (req, res) => {
@@ -295,6 +403,22 @@ app.post('/api/grades', (req, res) => {
         res.status(201).json({id, ...d});
     });
 });
+app.put('/api/grades/:id', (req, res) => {
+    const d = req.body;
+    db.run('UPDATE grades SET q1 = ?, q2 = ?, q3 = ?, q4 = ?, finalAverage = ?, remarks = ?, subject = ? WHERE id = ?',
+           [d.q1, d.q2, d.q3, d.q4, d.finalAverage, d.remarks, d.subject, req.params.id], (err) => {
+        if (err) return res.status(500).json({message:"Error"});
+        logActivity("Teacher", "Teacher", "Grade Updated", "Academic");
+        res.json({message:"Updated"});
+    });
+});
+app.delete('/api/grades/:id', (req, res) => {
+    db.run('DELETE FROM grades WHERE id = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json({message:"Error"});
+        logActivity("Teacher", "Teacher", "Grade Deleted", "Academic");
+        res.json({message:"Deleted"});
+    });
+});
 
 app.get('/api/modules', (req, res) => {
     db.all('SELECT * FROM modules', [], (err, rows) => { if (err) return res.status(500).json({message:"Error"}); res.json(rows); });
@@ -336,17 +460,17 @@ app.get('/api/assignments', (req, res) => {
 app.post('/api/assignments', (req, res) => {
     const d = req.body;
     const id = 'asn-' + Date.now();
-    db.run('INSERT INTO assignments (id, title, subject, dueDate, section, status) VALUES (?, ?, ?, ?, ?, ?)', 
-           [id, d.title, d.subject, d.dueDate, d.section, d.status], (err) => {
+    db.run('INSERT INTO assignments (id, title, subject, dueDate, dueTime, section, status, allowedFileTypes, isLocked, resourceLink) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+           [id, d.title, d.subject, d.dueDate, d.dueTime, d.section, d.status, d.allowedFileTypes, 0, d.resourceLink], (err) => {
         if (err) return res.status(500).json({message:"Error"});
         logActivity("Teacher", "Teacher", `Assignment Created: ${d.title}`, "Academic");
-        res.status(201).json({id, ...d});
+        res.status(201).json({id, ...d, isLocked: 0});
     });
 });
 app.put('/api/assignments/:id', (req, res) => {
     const d = req.body;
-    db.run('UPDATE assignments SET title = ?, subject = ?, dueDate = ?, section = ?, status = ? WHERE id = ?', 
-           [d.title, d.subject, d.dueDate, d.section, d.status, req.params.id], (err) => {
+    db.run('UPDATE assignments SET title = ?, subject = ?, dueDate = ?, dueTime = ?, section = ?, status = ?, allowedFileTypes = ?, isLocked = ?, resourceLink = ? WHERE id = ?', 
+           [d.title, d.subject, d.dueDate, d.dueTime, d.section, d.status, d.allowedFileTypes, d.isLocked, d.resourceLink, req.params.id], (err) => {
         if (err) return res.status(500).json({message:"Error"});
         res.json({message:"Updated"});
     });
@@ -361,15 +485,70 @@ app.delete('/api/assignments/:id', (req, res) => {
 app.get('/api/submissions', (req, res) => {
     db.all('SELECT * FROM submissions', [], (err, rows) => { if (err) return res.status(500).json({message:"Error"}); res.json(rows); });
 });
-app.post('/api/submissions', (req, res) => {
-    const d = req.body;
-    const id = 'sub-' + Date.now();
-    db.run('INSERT INTO submissions (id, assignmentId, studentId, studentName, fileName, fileData, submittedAt, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-           [id, d.assignmentId, d.studentId, d.studentName, d.fileName, d.fileData, new Date().toLocaleString(), 'pending'], (err) => {
-        if (err) return res.status(500).json({message:"Error"});
-        logActivity(d.studentId, d.studentName, `Submission: ${d.fileName}`, "Academic");
-        res.status(201).json({id, ...d});
-    });
+app.post('/api/submissions', documentUpload.single('file'), (req, res) => {
+    try {
+        const d = req.body;
+        console.log('[DEBUG] POST /api/submissions body:', JSON.stringify(d, null, 2));
+        
+        // 1. Check for existing submission
+        db.get('SELECT id FROM submissions WHERE assignmentId = ? AND studentId = ?', [d.assignmentId, d.studentId], (err, row) => {
+             if (err) return res.status(500).json({message: "Database error"});
+             if (row) return res.status(400).json({message: "You have already submitted for this assignment."});
+
+             // 2. Check assignment details (Deadline, Lock Status, File Type)
+             db.get('SELECT * FROM assignments WHERE id = ?', [d.assignmentId], (err, assignment) => {
+                 if (err || !assignment) return res.status(404).json({message: "Assignment not found"});
+                 
+                 // Check if locked
+                 if (assignment.isLocked) return res.status(400).json({message: "This assignment is closed for submissions."});
+                 
+                 // Check deadline
+                 if (assignment.dueDate) {
+                     const deadlineString = assignment.dueTime ? `${assignment.dueDate}T${assignment.dueTime}` : `${assignment.dueDate}T23:59:00`;
+                     const deadline = new Date(deadlineString);
+                     if (new Date() > deadline) {
+                         return res.status(400).json({message: "The deadline for this assignment has passed."});
+                     }
+                 }
+
+                 // Check file type
+                 let fileName = d.fileName;
+                 if (req.file) fileName = req.file.originalname;
+                 
+                 if (assignment.allowedFileTypes && assignment.allowedFileTypes.length > 0) {
+                     const allowed = assignment.allowedFileTypes.split(',').map(t => t.trim().toLowerCase());
+                     const ext = '.' + fileName.split('.').pop().toLowerCase();
+                     const normalizedAllowed = allowed.map(t => t.startsWith('.') ? t : '.' + t);
+                     
+                     // Allow if ext matches any allowed type
+                     if (!normalizedAllowed.includes(ext)) {
+                         return res.status(400).json({message: `Invalid file format. Allowed: ${assignment.allowedFileTypes}`});
+                     }
+                 }
+
+                 // Proceed with insertion
+                 const id = 'sub-' + Date.now();
+                 let fileData = d.fileData;
+                 if (req.file) {
+                     const relativePath = '/uploads/documents/' + req.file.filename;
+                     fileData = relativePath;
+                 }
+         
+                 db.run('INSERT INTO submissions (id, assignmentId, studentId, studentName, fileName, fileData, submittedAt, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                     [id, d.assignmentId, d.studentId, d.studentName, fileName, fileData, new Date().toLocaleString(), 'pending'], (err) => {
+                     if (err) {
+                         console.error('[ERROR] Database insert failed:', err);
+                         return res.status(500).json({message:"Error inserting into database", error: err.message});
+                     }
+                     logActivity(d.studentId, d.studentName, `Submission: ${fileName}`, "Academic");
+                     res.status(201).json({id, ...d, fileName, fileData});
+                 });
+             });
+        });
+    } catch (error) {
+        console.error('[ERROR] Exception in /api/submissions:', error);
+        res.status(500).json({message: "Internal Server Error", error: error.message});
+    }
 });
 app.put('/api/submissions/:id', (req, res) => {
     const { grade, feedback, status } = req.body;
@@ -484,6 +663,66 @@ app.put('/api/doc-requests/:id', (req, res) => {
         res.json({ message: "Updated" });
     });
 });
+
+// ENROLLMENT API
+app.get('/api/enrollment', (req, res) => {
+    db.all('SELECT * FROM enrollment_applications', [], (err, rows) => {
+        if (err) return res.status(500).json({ message: "Error" });
+        res.json(rows.map(r => ({ id: r.id, ...r })));
+    });
+});
+app.post('/api/enrollment', (req, res, next) => {
+    documentUpload.array('sf9', 10)(req, res, function (err) {
+        if (err) {
+            console.error("Multer Error:", err);
+            return res.status(500).json({ message: "File upload error: " + err.message });
+        }
+        next();
+    });
+}, (req, res) => {
+    console.log("Enrollment Req Body:", req.body);
+    // If no text fields, body might be empty if not parsed correctly, but multer array handles mixed multipart.
+    // However, if no files are sent, req.body is still populated.
+    
+    if (!req.body) return res.status(400).json({ message: "No body data" });
+    
+    const { firstName, middleName, lastName, extension, email, targetGrade, previousSchool } = req.body;
+    let fullName = req.body.fullName;
+    if (!fullName && firstName) {
+        fullName = `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}${extension ? ' ' + extension : ''}`.trim();
+    }
+
+    const id = 'app-' + Date.now();
+    
+    let sf9Path = '';
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+        sf9Path = req.files.map(f => '/uploads/documents/' + f.filename).join(',');
+    } else if (req.file) {
+        // Fallback if single was used or logic varies (though we used array())
+        sf9Path = '/uploads/documents/' + req.file.filename;
+    }
+
+    db.run('INSERT INTO enrollment_applications (id, fullName, firstName, middleName, lastName, extension, email, targetGrade, previousSchool, status, dateApplied, sf9Path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, fullName, firstName, middleName, lastName, extension, email, targetGrade, previousSchool, 'pending', new Date().toLocaleDateString(), sf9Path],
+        function(err) {
+            if (err) {
+                console.error("Enrollment Insert Error:", err);
+                return res.status(500).json({ message: "Error saving application" });
+            }
+            logActivity("System", "Applicant", `New Enrollment App: ${fullName}`, "Admissions");
+            res.status(201).json({ id, fullName, email, status: 'pending' });
+        }
+    );
+});
+app.put('/api/enrollment/:id', (req, res) => {
+    const { status } = req.body;
+    db.run('UPDATE enrollment_applications SET status = ? WHERE id = ?', [status, req.params.id], (err) => {
+        if (err) return res.status(500).json({ message: "Error" });
+        logActivity("Admin", "Registrar", `Updated Enrollment App ${req.params.id}`, "Admissions");
+        res.json({ message: "Updated" });
+    });
+});
+
 app.get('/api/finances', (req, res) => { db.all('SELECT * FROM fee_records', [], (err, rows) => { res.json(rows); }); });
 app.get('/api/email-logs', (req, res) => { db.all('SELECT * FROM email_logs ORDER BY timestamp DESC', [], (err, rows) => { res.json(rows); }); });
 
@@ -567,6 +806,69 @@ app.post('/api/email-broadcast', async (req, res) => {
         logActivity("Admin/Faculty", "Sender", `Broadcast Sent to ${uniqueUsers.length} users`, "Communication");
         res.status(201).json({ message: "Broadcast sent" });
     } catch (e) { console.error(e); res.status(500).json({ message: "Error" }); }
+});
+
+// --- PASSWORD RESET ROUTES ---
+app.post('/api/auth/forgot-password', (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email required" });
+
+    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
+        if (err || !user) return res.status(404).json({ message: "User not found" });
+        if (user.role === 'ADMIN') return res.status(403).json({ message: "Admin password reset is restricted. Please contact system support." });
+
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenExpiry = Date.now() + 3600000; // 1 hour
+
+        db.run('UPDATE users SET resetToken = ?, resetTokenExpiry = ? WHERE id = ?', [resetToken, resetTokenExpiry, user.id], (err) => {
+            if (err) return res.status(500).json({ message: "Database error" });
+
+            const resetLink = `http://localhost:3000/forgot-password?token=${resetToken}`;
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: email,
+                subject: 'Password Reset Token - Sto. Niño Portal',
+                html: `
+                    <h1>Password Reset Request</h1>
+                    <p>Hello ${user.name},</p>
+                    <p>You requested a password reset. Please copy the token below and paste it into the recovery form:</p>
+                    <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 18px; text-align: center; margin: 20px 0;">
+                        ${resetToken}
+                    </div>
+                    <p>Or click this link to auto-fill: <a href="${resetLink}">Reset Password</a></p>
+                    <p>This token will expire in 1 hour.</p>
+                `
+            };
+
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    console.log('Error sending reset email:', error);
+                    return res.status(500).json({ message: "Failed to send email" });
+                }
+                console.log('Reset email sent:', info.response);
+                res.json({ message: "Password reset email sent" });
+            });
+        });
+    });
+});
+
+app.post('/api/auth/reset-password', (req, res) => {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ message: "Token and new password required" });
+
+    db.get('SELECT * FROM users WHERE resetToken = ?', [token], (err, user) => {
+        if (err || !user) return res.status(400).json({ message: "Invalid or expired token" });
+        
+        if (Date.now() > user.resetTokenExpiry) {
+            return res.status(400).json({ message: "Token expired" });
+        }
+
+        db.run('UPDATE users SET password = ?, resetToken = NULL, resetTokenExpiry = NULL WHERE id = ?', [newPassword, user.id], (err) => {
+            if (err) return res.status(500).json({ message: "Database error" });
+            logActivity(user.id, user.name, "Password Reset", "Auth");
+            res.json({ message: "Password reset successfully" });
+        });
+    });
 });
 
 app.listen(PORT, () => {

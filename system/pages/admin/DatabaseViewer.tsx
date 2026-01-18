@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../src/api';
 import { 
-  Database, Download, Search, Plus, Trash2, Loader2, Activity, FileSpreadsheet, X, ChevronRight, ChevronLeft, Save, Archive
+  Database, Download, Search, Plus, Trash2, Loader2, Activity, FileSpreadsheet, X, ChevronRight, ChevronLeft, Save, Archive, Upload
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -14,6 +14,8 @@ const DatabaseViewer: React.FC = () => {
   const [dataLoading, setDataLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Edit state
   const [editingCell, setEditingCell] = useState<{ rowId: string, field: string } | null>(null);
@@ -114,6 +116,58 @@ const DatabaseViewer: React.FC = () => {
     }
   };
 
+  const handleImportDb = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setImporting(true);
+      try {
+          const data = await file.arrayBuffer();
+          const workbook = XLSX.read(data);
+          
+          // Try to find a sheet with the active table name, otherwise use the first sheet
+          const sheetName = workbook.SheetNames.find(n => n.toLowerCase() === activeTab.toLowerCase()) || workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          if (jsonData.length === 0) {
+              alert("No data found in the imported file.");
+              setImporting(false);
+              return;
+          }
+
+          let successCount = 0;
+          let failCount = 0;
+
+          // Sequential insert to avoid overwhelming the server/sqlite
+          for (const row of jsonData) {
+              try {
+                  // Ensure ID is present if needed, or let backend handle it if it's auto-generated (usually requires ID in this system)
+                  // For updates, we might need a different strategy, but for now we assume insert.
+                  // If ID exists and matches, it might fail.
+                   await api.insertTableRecord(activeTab, row);
+                   successCount++;
+              } catch (err) {
+                  console.warn("Failed to insert row:", row, err);
+                  failCount++;
+              }
+          }
+          
+          alert(`Import complete.\nSuccess: ${successCount}\nFailed: ${failCount}`);
+          
+          // Refresh data
+          const freshData = await api.getTableData(activeTab);
+          setTableData(freshData);
+
+      } catch (error) {
+          console.error("Import failed:", error);
+          alert("Failed to import database: " + error.message);
+      } finally {
+          setImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+  };
+
   const exportCSV = () => {
     if (tableData.length === 0) return;
     const headers = tableColumns.map(c => c.name);
@@ -177,6 +231,21 @@ const DatabaseViewer: React.FC = () => {
         </div>
         
         <div className="flex gap-4">
+          <input 
+            type="file" 
+            accept=".xlsx, .xls" 
+            ref={fileInputRef} 
+            onChange={handleImportDb} 
+            className="hidden" 
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
+          >
+            {importing ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+            Import (XLSX)
+          </button>
           <button 
             onClick={exportAllTables}
             disabled={exporting}

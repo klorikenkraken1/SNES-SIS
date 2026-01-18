@@ -95,7 +95,9 @@ const Dashboard: React.FC<{ user: User }> = ({ user }) => {
       {/* Hero Section */}
       <div className={`relative p-12 lg:p-20 rounded-[4rem] overflow-hidden shadow-2xl border border-white/10 ${
         user.role === UserRole.STUDENT ? 'bg-gradient-to-br from-school-navy via-indigo-900 to-indigo-950 text-white' : 
-        isAdminOrFaculty ? 'bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white' : 'bg-gradient-to-br from-indigo-700 to-indigo-900 text-white'
+        isAdminOrFaculty ? 'bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white' : 
+        user.role === UserRole.TEACHER ? 'bg-gradient-to-br from-rose-700 via-rose-800 to-rose-950 text-white' :
+        'bg-gradient-to-br from-indigo-700 to-indigo-900 text-white'
       }`}>
         <div className="relative z-10 flex flex-col lg:flex-row justify-between lg:items-center gap-10">
           <div className="max-w-2xl">

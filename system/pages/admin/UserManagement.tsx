@@ -23,7 +23,10 @@ const UserManagement: React.FC = () => {
   // Form states
   const [newPass, setNewPass] = useState('');
   const [createForm, setCreateForm] = useState({
-    name: '',
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    extension: '',
     email: '',
     role: UserRole.STUDENT
   });
@@ -85,15 +88,15 @@ const UserManagement: React.FC = () => {
     e.preventDefault();
     setFormError('');
     
-    if (!createForm.name || !createForm.email) {
+    if (!createForm.firstName || !createForm.lastName || !createForm.email) {
       setFormError('Please fill in all required fields.');
       return;
     }
 
     try {
-      await api.createUser(createForm.name, createForm.email, createForm.role); 
+      await api.createUser(createForm); 
       setIsAddingUser(false);
-      setCreateForm({ name: '', email: '', role: UserRole.STUDENT });
+      setCreateForm({ firstName: '', middleName: '', lastName: '', extension: '', email: '', role: UserRole.STUDENT });
       load();
     } catch (err) {
       setFormError(`Failed to create account: ${err.message}`);
@@ -103,6 +106,10 @@ const UserManagement: React.FC = () => {
   const openEditModal = (user: User) => {
       setEditingUser(user);
       setEditForm({ 
+          firstName: user.firstName || '',
+          middleName: user.middleName || '',
+          lastName: user.lastName || '',
+          extension: user.extension || '',
           role: user.role, 
           assignedSections: user.assignedSections || [],
           advisorySection: user.advisorySection || '',
@@ -113,7 +120,14 @@ const UserManagement: React.FC = () => {
   const handleUpdateUser = async () => {
     if (!editingUser) return;
     try {
-      await api.updateUser(editingUser.id, editForm);
+      // Reconstruct name for legacy support if name parts changed
+      const f = editForm.firstName || editingUser.firstName || '';
+      const m = editForm.middleName || editingUser.middleName || '';
+      const l = editForm.lastName || editingUser.lastName || '';
+      const e = editForm.extension || editingUser.extension || '';
+      const fullName = `${f} ${m ? m + ' ' : ''}${l}${e ? ' ' + e : ''}`.trim();
+      
+      await api.updateUser(editingUser.id, { ...editForm, name: fullName });
       setEditingUser(null);
       load();
     } catch (error) {
@@ -252,6 +266,15 @@ const UserManagement: React.FC = () => {
               
               <div className="space-y-4">
                  <div>
+                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-2">Name Components</label>
+                     <div className="grid grid-cols-2 gap-2">
+                        <input type="text" placeholder="First Name" className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={editForm.firstName || ''} onChange={e => setEditForm({...editForm, firstName: e.target.value})} />
+                        <input type="text" placeholder="Middle" className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={editForm.middleName || ''} onChange={e => setEditForm({...editForm, middleName: e.target.value})} />
+                        <input type="text" placeholder="Last Name" className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={editForm.lastName || ''} onChange={e => setEditForm({...editForm, lastName: e.target.value})} />
+                        <input type="text" placeholder="Ext." className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={editForm.extension || ''} onChange={e => setEditForm({...editForm, extension: e.target.value})} />
+                     </div>
+                 </div>
+                 <div>
                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-2">System Role</label>
                      <select 
                         className="w-full px-6 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm border-2 border-transparent focus:border-indigo-600"
@@ -338,14 +361,13 @@ const UserManagement: React.FC = () => {
               
               <form onSubmit={handleCreateUser} className="space-y-6">
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-2">Full Name</label>
-                  <input 
-                    type="text" required
-                    className="w-full px-6 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm border-2 border-transparent focus:border-indigo-600"
-                    placeholder="Enter user's full name"
-                    value={createForm.name}
-                    onChange={e => setCreateForm({...createForm, name: e.target.value})}
-                  />
+                  <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-2">Name Components</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" required placeholder="First Name" className="w-full px-4 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={createForm.firstName} onChange={e => setCreateForm({...createForm, firstName: e.target.value})} />
+                    <input type="text" placeholder="Middle" className="w-full px-4 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={createForm.middleName} onChange={e => setCreateForm({...createForm, middleName: e.target.value})} />
+                    <input type="text" required placeholder="Last Name" className="w-full px-4 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={createForm.lastName} onChange={e => setCreateForm({...createForm, lastName: e.target.value})} />
+                    <input type="text" placeholder="Ext." className="w-full px-4 py-4 bg-slate-100 dark:bg-slate-800 rounded-2xl outline-none font-bold text-sm" value={createForm.extension} onChange={e => setCreateForm({...createForm, extension: e.target.value})} />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-2">Email Address</label>

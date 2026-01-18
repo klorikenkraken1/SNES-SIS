@@ -25,6 +25,10 @@ export interface UserBadge {
 export interface User {
   id: string;
   name: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  extension?: string;
   email: string;
   role: UserRole;
   avatar?: string;
@@ -128,13 +132,21 @@ export interface Assignment {
   title: string;
   subject: string;
   dueDate: string;
+  dueTime?: string;
   section?: string;
   status: 'pending' | 'submitted' | 'graded';
+  allowedFileTypes?: string;
+  isLocked?: boolean;
+  resourceLink?: string;
 }
 
 export interface EnrollmentApplication {
   id: string;
   fullName: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  extension?: string;
   email: string;
   targetGrade: string;
   previousSchool: string;

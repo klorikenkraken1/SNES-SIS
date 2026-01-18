@@ -1,7 +1,13 @@
 import sqlite3 from 'sqlite3';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const verboseSqlite3 = sqlite3.verbose();
-const DBSOURCE = "db.sqlite";
+const DBSOURCE = path.join(__dirname, "db.sqlite");
 
 export const db = new verboseSqlite3.Database(DBSOURCE, (err) => {
     if (err) {
@@ -20,6 +26,10 @@ export const initDatabase = () => {
         db.run(`CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             name TEXT,
+            firstName TEXT,
+            middleName TEXT,
+            lastName TEXT,
+            extension TEXT,
             email TEXT UNIQUE,
             password TEXT,
             role TEXT,
@@ -44,6 +54,8 @@ export const initDatabase = () => {
             feedingProgramStatus TEXT,
             emailVerified BOOLEAN DEFAULT 0,
             verificationToken TEXT,
+            resetToken TEXT,
+            resetTokenExpiry INTEGER,
             academicHistory TEXT,
             requirements TEXT
         )`);
@@ -133,14 +145,22 @@ export const initDatabase = () => {
             title TEXT,
             subject TEXT,
             dueDate TEXT,
+            dueTime TEXT,
             section TEXT,
-            status TEXT
+            status TEXT,
+            allowedFileTypes TEXT,
+            isLocked BOOLEAN DEFAULT 0,
+            resourceLink TEXT
         )`);
 
         // Enrollment applications table
         db.run(`CREATE TABLE IF NOT EXISTS enrollment_applications (
             id TEXT PRIMARY KEY,
             fullName TEXT,
+            firstName TEXT,
+            middleName TEXT,
+            lastName TEXT,
+            extension TEXT,
             email TEXT,
             targetGrade TEXT,
             previousSchool TEXT,

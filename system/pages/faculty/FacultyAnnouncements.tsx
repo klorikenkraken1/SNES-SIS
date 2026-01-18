@@ -19,7 +19,8 @@ const FacultyAnnouncements: React.FC<{ user: User }> = ({ user }) => {
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
   const [loading, setLoading] = useState(true);
-  
+  const [sortOption, setSortOption] = useState('newest');
+
   // Renamed formData to createForm
   const [createForm, setCreateForm] = useState({ 
     title: '', 
@@ -43,6 +44,27 @@ const FacultyAnnouncements: React.FC<{ user: User }> = ({ user }) => {
   };
 
   useEffect(() => { load(); }, []);
+
+  const getSortedAnnouncements = () => {
+    return [...announcements].sort((a, b) => {
+      switch (sortOption) {
+        case 'newest':
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        case 'oldest':
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        case 'title-az':
+          return a.title.localeCompare(b.title);
+        case 'title-za':
+          return b.title.localeCompare(a.title);
+        case 'size-short':
+          return a.content.length - b.content.length;
+        case 'size-long':
+          return b.content.length - a.content.length;
+        default:
+          return 0;
+      }
+    });
+  };
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,19 +151,33 @@ const FacultyAnnouncements: React.FC<{ user: User }> = ({ user }) => {
           <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Bulletin Hub</h1>
           <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Broadcast news and academic updates to the school community.</p>
         </div>
-        {isPoster && (
-          <button 
-            onClick={() => setIsAddingAnnouncement(true)}
-            className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform shadow-xl"
+        <div className="flex items-center gap-4">
+          <select 
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value)}
+            className="px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl font-bold text-xs uppercase tracking-widest text-slate-500 outline-none focus:border-indigo-500 transition-all"
           >
-            <Plus size={20} />
-            New Post
-          </button>
-        )}
+            <option value="newest">Latest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="title-az">Title (A-Z)</option>
+            <option value="title-za">Title (Z-A)</option>
+            <option value="size-short">Shortest First</option>
+            <option value="size-long">Longest First</option>
+          </select>
+          {isPoster && (
+            <button 
+              onClick={() => setIsAddingAnnouncement(true)}
+              className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:scale-105 transition-transform shadow-xl"
+            >
+              <Plus size={20} />
+              New Post
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {announcements.map((ann) => (
+        {getSortedAnnouncements().map((ann) => (
           <div key={ann.id} className="p-8 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[3rem] shadow-sm flex flex-col md:flex-row gap-8 items-start">
             <div className={`w-14 h-14 rounded-3xl flex items-center justify-center flex-shrink-0 ${
               ann.category === 'Emergency' ? 'bg-rose-100 text-rose-600' : 'bg-indigo-50 text-indigo-600'

@@ -23,7 +23,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [nameParts, setNameParts] = useState({ firstName: '', middleName: '', lastName: '', extension: '' });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [lockout, setLockout] = useState<LockoutInfo | null>(null);
@@ -31,19 +31,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   useEffect(() => {
     setLockout(api.getLockoutInfo());
-
-    // Check for existing pending application on this device
-    const pendingApp = localStorage.getItem('pending_application');
-    if (pendingApp) {
-      const timestamp = parseInt(pendingApp, 10);
-      const now = Date.now();
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (now - timestamp < oneDay) {
-        setHasPendingApp(true);
-      } else {
-        localStorage.removeItem('pending_application'); // Expired
-      }
-    }
   }, []);
 
   const handleAction = async (e: React.FormEvent) => {
@@ -53,21 +40,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     try {
       if (isSignup) {
-        if (hasPendingApp) {
-          setError("You have a pending application. Only one account per device is allowed until approved or 24h passes.");
-          setIsLoading(false);
-          return;
-        }
-        // If Applicant (Transferee), use that role. Otherwise use PENDING for Student/Teacher approval.
-        // Actually, logic: Students/Teachers need approval (PENDING). Applicants need to fill form (TRANSFEREE).
-        // If selectedRole is TRANSFEREE, use it. Else PENDING.
+        // Disabled manually but code exists
+        /*
         const signupRole = selectedRole === UserRole.TRANSFEREE ? UserRole.TRANSFEREE : UserRole.PENDING;
-
-        const user = await api.signup(name, email, password, signupRole);
+        const user = await api.signup(nameParts, email, password, signupRole);
         localStorage.setItem('pending_application', Date.now().toString());
         onLogin(user);
+        */
+        setError("Sign-ups are currently disabled.");
+        setIsLoading(false);
+        return;
       } else {
         const user = await api.login(email, password);
+// ... existing login logic ...
         if (user) {
           if (user.role !== selectedRole && user.role !== UserRole.ADMIN && user.role !== UserRole.PENDING) {
             setError(`Invalid credentials for ${selectedRole} portal.`);
@@ -89,9 +74,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const roles = [
     { id: UserRole.STUDENT, title: 'Students', desc: 'View grades & modules', icon: <GraduationCap size={32} />, color: 'from-indigo-600 to-blue-700' },
-    { id: UserRole.TEACHER, title: 'Teachers', desc: 'Manage sections & grading', icon: <Presentation size={32} />, color: 'from-cyan-600 to-blue-700' },
+    { id: UserRole.TEACHER, title: 'Teachers', desc: 'Manage sections & grading', icon: <Presentation size={32} />, color: 'from-rose-600 to-red-800' },
     // { id: UserRole.TRANSFEREE, title: 'Applicants', desc: 'New student registration', icon: <UserPlus size={32} />, color: 'from-emerald-600 to-teal-700' },
-    { id: UserRole.ADMIN, title: 'Admin', desc: 'System setup & control', icon: <ShieldAlert size={32} />, color: 'from-rose-600 to-red-800' }
+    { id: UserRole.ADMIN, title: 'Admin', desc: 'System setup & control', icon: <ShieldAlert size={32} />, color: 'from-slate-600 to-slate-800' }
   ];
 
   const isSuspended = lockout?.suspendedUntil && Date.now() < lockout.suspendedUntil;
@@ -199,13 +184,27 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
                     {isSignup && (
                       <div className="space-y-2 md:space-y-3">
-                        <label className="block text-xs md:text-sm font-black uppercase tracking-[0.2em] text-white/40 ml-3">Legal Name</label>
-                        <div className="relative flex items-center">
-                          <UserIcon className="absolute left-6 text-white/20" size={20} />
+                        <label className="block text-xs md:text-sm font-black uppercase tracking-[0.2em] text-white/40 ml-3">Name Components</label>
+                        <div className="grid grid-cols-2 gap-2">
                           <input
-                            type="text" required value={name} onChange={(e) => setName(e.target.value)}
-                            className="w-full pl-16 pr-8 py-4 md:py-6 rounded-[2rem] bg-white/5 backdrop-blur-xl border-2 border-white/5 focus:border-school-gold outline-none font-bold text-sm md:text-base text-white shadow-xl transition-all"
-                            placeholder="Juan Dela Cruz"
+                            type="text" required value={nameParts.firstName} onChange={(e) => setNameParts({...nameParts, firstName: e.target.value})}
+                            className="w-full px-4 py-4 md:py-6 rounded-[2rem] bg-white/5 backdrop-blur-xl border-2 border-white/5 focus:border-school-gold outline-none font-bold text-sm md:text-base text-white shadow-xl transition-all"
+                            placeholder="First Name"
+                          />
+                          <input
+                            type="text" value={nameParts.middleName} onChange={(e) => setNameParts({...nameParts, middleName: e.target.value})}
+                            className="w-full px-4 py-4 md:py-6 rounded-[2rem] bg-white/5 backdrop-blur-xl border-2 border-white/5 focus:border-school-gold outline-none font-bold text-sm md:text-base text-white shadow-xl transition-all"
+                            placeholder="Middle Name"
+                          />
+                          <input
+                            type="text" required value={nameParts.lastName} onChange={(e) => setNameParts({...nameParts, lastName: e.target.value})}
+                            className="w-full px-4 py-4 md:py-6 rounded-[2rem] bg-white/5 backdrop-blur-xl border-2 border-white/5 focus:border-school-gold outline-none font-bold text-sm md:text-base text-white shadow-xl transition-all"
+                            placeholder="Last Name"
+                          />
+                          <input
+                            type="text" value={nameParts.extension} onChange={(e) => setNameParts({...nameParts, extension: e.target.value})}
+                            className="w-full px-4 py-4 md:py-6 rounded-[2rem] bg-white/5 backdrop-blur-xl border-2 border-white/5 focus:border-school-gold outline-none font-bold text-sm md:text-base text-white shadow-xl transition-all"
+                            placeholder="Ext."
                           />
                         </div>
                       </div>
@@ -247,13 +246,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </button>
 
                     <div className="text-center pt-4 md:pt-6">
-                      <button
+                      {/* <button
                         type="button"
                         onClick={() => { setIsSignup(!isSignup); setError(''); }}
                         className="text-xs md:text-sm font-black uppercase tracking-[0.3em] text-white/30 hover:text-school-gold transition-colors"
                       >
                         {isSignup ? 'Already registered? Login' : 'No account? Create profile'}
-                      </button>
+                      </button> */}
                     </div>
                   </form>
                 )}
