@@ -30,6 +30,8 @@ Lahat ng accounts sa baba ay gumagamit ng **master password: `123`**
 | **Applicant** | `applicant@gmail.com` | `123` |
 
 ### ✨ Special Features
+- **QR ID Login:** Pwede mong i-scan ang digital ID para mag-login (requires camera).
+- **ID Management:** Download at Print features para sa Student ID cards.
 - **Instant Signup:** Pwede kang gumawa ng bagong account sa "Create profile" link. Ang mga bagong account ay **auto-verified** at pwede nang i-login agad.
 - **Master Password:** Ang password na `123` ay gagana sa **kahit anong** existing account dito sa demo.
 - **Persistent Data:** Lahat ng changes na gagawin mo (pag-add ng assignments, grades, etc.) ay mase-save sa LocalStorage ng browser mo.

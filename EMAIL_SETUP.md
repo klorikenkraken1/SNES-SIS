@@ -46,4 +46,7 @@ Kung gusto mo ng mas professional na setup na may higher limits (300 emails/day 
 3.  Mag-generate ng bagong SMTP Key.
 4.  I-update ang iyong backend configuration (baka kailangan mong palitan ang `server.js` host/port settings sa `smtp-relay.brevo.com` port `587`).
 
-Para sa default configuration ng system na ito, **Gmail (Option 1)** ang recommended dahil pre-configured na ang `server.js` para sa `gmail` service shorthand.
+ Para sa default configuration ng system na ito, **Gmail (Option 1)** ang recommended dahil pre-configured na ang `server.js` para sa `gmail` service shorthand.
+
+## 🛡️ Email Verification
+Ang system ay may built-in email verification. Kapag nag-signup ang isang bagong user, makakatanggap sila ng verification link. Kailangan nilang i-click ito para ma-verify ang account at makakuha ng full access sa portal features. Siguraduhing tama ang iyong `.env` setup para gumana ang automated emails na ito.
