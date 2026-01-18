@@ -149,7 +149,6 @@ const Sidebar: React.FC<{ user: User, isOpen: boolean, onClose: () => void, onLo
       { name: 'User Control', path: '/admin/users', icon: Users },
       { name: 'Database Forge', path: '/admin/database', icon: Database },
       { name: 'Facilities', path: '/admin/facilities', icon: Building2 },
-      { name: 'Attendance Sheet', path: '/faculty/attendance', icon: CheckCircle },
       { name: 'Broadcast', path: '/announcements', icon: Bell },
       { name: 'Email Alerts', path: '/faculty/email', icon: MessageSquare },
     ],
@@ -351,7 +350,7 @@ const App: React.FC = () => {
                 <Route path="/faculty-requests" element={[UserRole.FACULTY, UserRole.ADMIN].includes(user.role) ? <FacultyRequests user={user} /> : <Navigate to="/" />} />
                 <Route path="/faculty/submissions" element={[UserRole.TEACHER, UserRole.ADMIN].includes(user.role) ? <StudentSubmissions user={user} /> : <Navigate to="/" />} />
                 <Route path="/faculty/email" element={[UserRole.FACULTY, UserRole.TEACHER, UserRole.ADMIN].includes(user.role) ? <FacultyEmail user={user} /> : <Navigate to="/" />} />
-                <Route path="/faculty/attendance" element={[UserRole.TEACHER, UserRole.FACULTY, UserRole.ADMIN].includes(user.role) ? <AttendanceSheet user={user} /> : <Navigate to="/" />} />
+                <Route path="/faculty/attendance" element={[UserRole.TEACHER, UserRole.FACULTY].includes(user.role) ? <AttendanceSheet user={user} /> : <Navigate to="/" />} />
                 <Route path="/admin/users" element={user.role === UserRole.ADMIN ? <AdminUserManagement /> : <Navigate to="/" />} />
                 <Route path="/admin/database" element={user.role === UserRole.ADMIN ? <DatabaseViewer /> : <Navigate to="/" />} />
                 <Route path="/admin/facilities" element={user.role === UserRole.ADMIN ? <AdminFacilities /> : <Navigate to="/" />} />
