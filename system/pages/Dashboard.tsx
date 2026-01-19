@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Announcement, UserRole, SchoolEvent, ActivityLog } from '../types';
-import { api } from '../mockApiService';
+import { api } from '../src/api';
 import { 
   Bell, Calendar, Clock, Star, 
   GraduationCap, 
@@ -47,7 +47,7 @@ const Dashboard: React.FC<{ user: User }> = ({ user }) => {
 
     setAnnouncements(anns);
     setEvents(evs);
-    setLogs(activityLogs.slice(0, 10)); 
+    setLogs(activityLogs.slice(0, 3)); 
     setStats({
       totalUsers: allUsers.length,
       activeStudents: allUsers.filter(u => u.role === UserRole.STUDENT).length,
@@ -178,7 +178,15 @@ const Dashboard: React.FC<{ user: User }> = ({ user }) => {
                    <h2 className="text-2xl font-black flex items-center gap-4 text-white uppercase tracking-tighter">
                      <History className="text-school-gold" /> Audit Trail
                    </h2>
-                   <span className="text-[10px] font-black text-school-gold/50 uppercase tracking-[0.4em]">Live Security Protocol</span>
+                   <div className="flex items-center gap-4">
+                      <span className="hidden sm:inline text-[10px] font-black text-school-gold/50 uppercase tracking-[0.4em]">Live Security Protocol</span>
+                      <button 
+                        onClick={() => navigate("/admin/database", { state: { initialTable: 'activity_logs' } })}
+                        className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-[9px] uppercase tracking-widest transition-all border border-white/10"
+                      >
+                        View Full Logs
+                      </button>
+                   </div>
                 </div>
                 <div className="space-y-4 relative z-10">
                    {logs.map(log => (

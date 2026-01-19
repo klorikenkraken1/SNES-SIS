@@ -86,6 +86,13 @@ export const api = {
         method: 'DELETE',
     }),
 
+    // Events API
+    getEvents: () => fetchData('/events'),
+    postEvent: (eventData) => fetchData('/events', {
+        method: 'POST',
+        body: JSON.stringify(eventData),
+    }),
+
     // Grades API
     getGrades: (studentId = '') => fetchData(`/grades${studentId ? `?studentId=${studentId}` : ''}`),
     createGrade: (gradeData) => fetchData('/grades', {
@@ -269,4 +276,7 @@ export const api = {
     
     // Auth Helpers
     getLockoutInfo: () => ({ attempts: 0, suspendedUntil: null }),
+    
+    // Logs API
+    getLogs: () => fetchData('/logs'),
 };

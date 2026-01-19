@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../../src/api';
 import { 
   Database, Download, Search, Plus, Trash2, Loader2, Activity, FileSpreadsheet, X, ChevronRight, ChevronLeft, Save, Archive, Upload
@@ -6,6 +7,7 @@ import {
 import * as XLSX from 'xlsx';
 
 const DatabaseViewer: React.FC = () => {
+  const location = useLocation();
   const [tables, setTables] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
   const [tableData, setTableData] = useState<any[]>([]);
@@ -30,7 +32,12 @@ const DatabaseViewer: React.FC = () => {
       try {
         const tableList = await api.getTables();
         setTables(tableList);
-        if (tableList.length > 0) {
+        
+        // Check if a specific table was requested via navigation state
+        const requestedTable = location.state?.initialTable;
+        if (requestedTable && tableList.includes(requestedTable)) {
+          setActiveTab(requestedTable);
+        } else if (tableList.length > 0) {
           setActiveTab(tableList[0]);
         }
       } catch (error) {
@@ -40,7 +47,7 @@ const DatabaseViewer: React.FC = () => {
       }
     };
     fetchTables();
-  }, []);
+  }, [location.state]);
 
   useEffect(() => {
     if (!activeTab) return;

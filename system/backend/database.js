@@ -164,6 +164,8 @@ export const initDatabase = () => {
             email TEXT,
             targetGrade TEXT,
             previousSchool TEXT,
+            parentName TEXT,
+            parentContact TEXT,
             status TEXT,
             dateApplied TEXT,
             psaNumber TEXT,

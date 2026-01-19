@@ -31,11 +31,6 @@ const FacultyRequests: React.FC<{ user: User }> = ({ user }) => {
     setProcessing(id);
     try {
       await api.updateEnrollmentStatus(id, 'approved');
-      const users = await api.getUsers();
-      const applicantUser = users.find((u: User) => u.email === email);
-      if (applicantUser) {
-        await api.updateUser(applicantUser.id, { role: UserRole.STUDENT });
-      }
       load();
     } catch (error) {
       console.error("Failed to approve admission:", error);

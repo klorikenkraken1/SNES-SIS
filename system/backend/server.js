@@ -100,6 +100,13 @@ const logActivity = (userId, userName, action, category) => {
     );
 };
 
+app.get('/api/logs', (req, res) => {
+    db.all('SELECT * FROM activity_logs ORDER BY timestamp DESC', [], (err, rows) => {
+        if (err) return res.status(500).json({ message: "Error fetching logs" });
+        res.json(rows);
+    });
+});
+
 // Middleware for request logging
 app.use((req, res, next) => {
     console.log(`[REQ] ${req.method} ${req.url}`);
@@ -266,6 +273,23 @@ app.delete('/api/announcements/:id', (req, res) => {
         if (err) return res.status(500).json({ message: "Error" });
         logActivity("User", "User", `Deleted Announcement ${req.params.id}`, "Communication");
         res.json({ message: "Deleted" });
+    });
+});
+
+// EVENTS API
+app.get('/api/events', (req, res) => {
+    db.all('SELECT * FROM school_events', [], (err, rows) => {
+        if (err) return res.status(500).json({ message: "Error" });
+        res.json(rows);
+    });
+});
+app.post('/api/events', (req, res) => {
+    const { title, date, month, day, type } = req.body;
+    const id = 'ev-' + Date.now();
+    db.run('INSERT INTO school_events (id, title, date, month, day, type) VALUES (?, ?, ?, ?, ?, ?)', [id, title, date, month, day, type], function(err) {
+        if (err) return res.status(500).json({ message: "Error" });
+        logActivity("Admin", "Admin", `Posted Event: ${title}`, "Calendar");
+        res.status(201).json({ id, title, date, month, day, type });
     });
 });
 
@@ -687,7 +711,7 @@ app.post('/api/enrollment', (req, res, next) => {
     
     if (!req.body) return res.status(400).json({ message: "No body data" });
     
-    const { firstName, middleName, lastName, extension, email, targetGrade, previousSchool } = req.body;
+    const { firstName, middleName, lastName, extension, email, targetGrade, previousSchool, parentName, parentContact } = req.body;
     let fullName = req.body.fullName;
     if (!fullName && firstName) {
         fullName = `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}${extension ? ' ' + extension : ''}`.trim();
@@ -703,8 +727,8 @@ app.post('/api/enrollment', (req, res, next) => {
         sf9Path = '/uploads/documents/' + req.file.filename;
     }
 
-    db.run('INSERT INTO enrollment_applications (id, fullName, firstName, middleName, lastName, extension, email, targetGrade, previousSchool, status, dateApplied, sf9Path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, fullName, firstName, middleName, lastName, extension, email, targetGrade, previousSchool, 'pending', new Date().toLocaleDateString(), sf9Path],
+    db.run('INSERT INTO enrollment_applications (id, fullName, firstName, middleName, lastName, extension, email, targetGrade, previousSchool, parentName, parentContact, status, dateApplied, sf9Path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, fullName, firstName, middleName, lastName, extension, email, targetGrade, previousSchool, parentName, parentContact, 'pending', new Date().toLocaleDateString(), sf9Path],
         function(err) {
             if (err) {
                 console.error("Enrollment Insert Error:", err);
@@ -717,11 +741,99 @@ app.post('/api/enrollment', (req, res, next) => {
 });
 app.put('/api/enrollment/:id', (req, res) => {
     const { status } = req.body;
-    db.run('UPDATE enrollment_applications SET status = ? WHERE id = ?', [status, req.params.id], (err) => {
-        if (err) return res.status(500).json({ message: "Error" });
-        logActivity("Admin", "Registrar", `Updated Enrollment App ${req.params.id}`, "Admissions");
-        res.json({ message: "Updated" });
-    });
+    const { id } = req.params;
+
+    if (status === 'approved') {
+        db.get('SELECT * FROM enrollment_applications WHERE id = ?', [id], (err, app) => {
+            if (err || !app) return res.status(404).json({ message: "Application not found" });
+
+            // Check if user already exists
+            db.get('SELECT id FROM users WHERE email = ?', [app.email], (err, existingUser) => {
+                if (existingUser) return res.status(400).json({ message: "User with this email already exists" });
+
+                // Generate Password and LRN
+                const generatedPassword = Math.random().toString(36).slice(-8);
+                const generatedLRN = Math.floor(100000000000 + Math.random() * 900000000000).toString();
+                const userId = 'u-' + Date.now();
+
+                // Create User
+                const academicHistory = JSON.stringify([{
+                    grade: 'Previous',
+                    school: app.previousSchool || 'N/A',
+                    year: 'N/A'
+                }]);
+                const requirements = JSON.stringify({
+                    SF9: app.sf9Path || ''
+                });
+
+                db.run(`INSERT INTO users (id, name, firstName, middleName, lastName, extension, email, password, role, lrn, gradeLevel, guardianName, guardianPhone, academicHistory, requirements, status, emailVerified) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        userId, 
+                        app.fullName, 
+                        app.firstName, 
+                        app.middleName, 
+                        app.lastName, 
+                        app.extension, 
+                        app.email, 
+                        generatedPassword, 
+                        'STUDENT', 
+                        generatedLRN,
+                        app.targetGrade, 
+                        app.parentName,
+                        app.parentContact,
+                        academicHistory,
+                        requirements,
+                        'active', 
+                        1 // Verified
+                    ], 
+                    (err) => {
+                        if (err) {
+                            console.error("Failed to create user from enrollment:", err);
+                            return res.status(500).json({ message: "Failed to create user record" });
+                        }
+
+                        // Send Email
+                        if (process.env.EMAIL_USER) {
+                            const mailOptions = {
+                                from: process.env.EMAIL_USER,
+                                to: app.email,
+                                subject: 'Admission Approved - Sto. Niño Portal',
+                                html: `
+                                    <h1>Welcome to Sto. Niño Elementary School!</h1>
+                                    <p>Dear ${app.fullName},</p>
+                                    <p>Your admission application has been <strong>APPROVED</strong>.</p>
+                                    <p>Your Learner Reference Number (LRN) is: <strong>${generatedLRN}</strong></p>
+                                    <p>You can now log in to the student portal using the credentials below:</p>
+                                    <p><strong>Email:</strong> ${app.email}</p>
+                                    <p><strong>Password:</strong> ${generatedPassword}</p>
+                                    <p>Please change your password after your first login.</p>
+                                `
+                            };
+
+                            transporter.sendMail(mailOptions, (error, info) => {
+                                if (error) console.error("Failed to send approval email:", error);
+                                else console.log("Approval email sent:", info.response);
+                            });
+                        }
+
+                        // Update Status
+                        db.run('UPDATE enrollment_applications SET status = ? WHERE id = ?', [status, id], (err) => {
+                            if (err) return res.status(500).json({ message: "Error updating status" });
+                            logActivity("Admin", "Registrar", `Approved & Created User for ${app.fullName} (LRN: ${generatedLRN})`, "Admissions");
+                            res.json({ message: "Application approved and user created" });
+                        });
+                    }
+                );
+            });
+        });
+    } else {
+        db.run('UPDATE enrollment_applications SET status = ? WHERE id = ?', [status, id], (err) => {
+            if (err) return res.status(500).json({ message: "Error" });
+            logActivity("Admin", "Registrar", `Updated Enrollment App ${id}`, "Admissions");
+            res.json({ message: "Updated" });
+        });
+    }
 });
 
 app.get('/api/finances', (req, res) => { db.all('SELECT * FROM fee_records', [], (err, rows) => { res.json(rows); }); });
