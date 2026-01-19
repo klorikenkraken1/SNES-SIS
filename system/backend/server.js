@@ -408,10 +408,10 @@ app.put('/api/users/:id', (req, res) => {
     });
 });
 app.delete('/api/users/:id', (req, res) => {
-    db.run('DELETE FROM users WHERE id = ?', [req.params.id], (err) => {
+    db.run('UPDATE users SET status = ? WHERE id = ?', ['dropped', req.params.id], (err) => {
         if (err) return res.status(500).json({ message: "Error" });
-        logActivity(req.params.id, "Admin", "User Deleted", "Management");
-        res.json({ message: "Deleted" });
+        logActivity(req.params.id, "Admin", "User Dropped (Soft Delete)", "Management");
+        res.json({ message: "User dropped successfully" });
     });
 });
 
