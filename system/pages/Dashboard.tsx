@@ -100,7 +100,7 @@ const Dashboard: React.FC<{ user: User }> = ({ user }) => {
     const dateObj = new Date(eventForm.date);
     const month = dateObj.toLocaleString('default', { month: 'short' }).toUpperCase();
     const day = dateObj.getDate().toString().padStart(2, '0');
-    await api.postEvent({ title: eventForm.title, date: eventForm.date, month, day, type: eventForm.type }, user.name);
+    await api.postEvent({ title: eventForm.title, date: eventForm.date, month, day, type: eventForm.type });
     setIsEventModalOpen(false);
     setEventForm({ title: '', date: '', type: 'Academic' });
     load();
